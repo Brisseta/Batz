@@ -19,6 +19,23 @@ with open('ressouces.json', 'r') as f:
     ressource_json = json.load(f)
 
 
+class CheckTemperature(threading.Thread):
+
+    def __init__(self, param1, param2, ):
+        threading.Thread.__init__(self)
+        self.param1 = param1
+        self.param2 = param2
+        # initialisation de la variable qui portera le résultat
+        self.result = None
+
+    def run(self):
+        """Lance le check status en tâche de fond et stocke le résultat en BDD dans la table trigger"""
+
+    def result(self):
+        """Renvoie le résultat lorsqu'il est connu"""
+        return self.result
+
+
 class SendSMS(threading.Thread, ):
     def __init__(self, event, contact, text):  # event = objet Event
         threading.Thread.__init__(self)  # = donnée supplémentaire
@@ -122,7 +139,27 @@ def getNumber(message):
         return "0" + item[1][0]['Phone'][3:]
 
 
-# on active l'object self.event
+def build_get_view(number):
+    contacts = Batz_API.models.Contact.objects
+    response = ""
+    response += ressource_json['Bonjour'] + " "
+    response += contacts.get(contact_phonenumber=number).contact_prenom
+    response += "\n"
+    return response
+
+
+def build_get_log(severity):
+    logs_in_db = Batz_API.models.Log.objects
+    selected_logs = logs_in_db.filter(log_severity=severity).order_by('-log_date')[:ressource_json['LOG_MAX_RESULT']]
+    response = ""
+    for log in selected_logs:
+        response += ressource_json['CROCHET_OUVRANT'] + log.log_severity + ressource_json['CROCHET_FERMANT']
+        response += " " + str(log.log_date.day) + " " + str(log.log_date.hour) + ":" + str(
+            log.log_date.minute) + ":" + str(
+            log.log_date.second) + ">"
+        response += log.log_data + "\n"
+    return response
+
 
 if __name__ == '__main__':
     getsms = GetSMS()  # crée un thread pour le get
@@ -137,17 +174,19 @@ if __name__ == '__main__':
             # send sms display
             event_du_send = threading.Event()  # on crée un objet de type Event
             event_du_send.clear()  # simple clear de précaution
-            thread_du_send = SendSMS(event_du_send, number, "Test GET INFO")  # crée un thread pour le get
+            thread_du_send = SendSMS(event_du_send, number, build_get_view(number))  # crée un thread pour le get
             thread_du_send.start()  # démarre le thread,
             event_du_send.wait()  # on attend la fin du get
 
-        # if content_global.contains(ressource_json['GET_LOG']):
-        #         #     # send sms log all
-        #         #     if content_global.contains("info"):
-        #         #
-        #         #     if content_global.contains("warnning"):
-        #         #
-        #         #     if content_global.contains("error"):
-        #         #
-        #         # if content_global.contains(ressource_json['GET_CONF']):
-# m = SendSMS(10, event, contact, "Test")  # crée un thread
+        if ressource_json['GET_LOG'] in content:
+            # send sms log all
+            if "info" in content:
+                event_du_send = threading.Event()  # on crée un objet de type Event
+                event_du_send.clear()  # simple clear de précaution
+                thread_du_send = SendSMS(event_du_send, number, build_get_log("INFO"))  # crée un thread pour le get
+                thread_du_send.start()  # démarre le thread,
+                event_du_send.wait()  # on attend la fin du get
+            if "warnning" in content:
+                print("warn")
+            if "error" in content:
+                print("error")

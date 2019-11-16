@@ -28,5 +28,6 @@
   "GET_CONF": "conf",
   "SET_CONF": "setconf",
   "SET_CONF_SEUIL": "sensor",
-  "SET_CONF_ANNUAIRE": "contact"
+  "SET_CONF_ANNUAIRE": "contact",
+  "LOG_MAX_RESULT": 3
 }

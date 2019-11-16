@@ -86,12 +86,39 @@ def GetSMS():
     messages = huaweisms.api.sms.get_sms(
         ctx
     )
+    print(messages)
     temp = dict()
     temp['authent'] = userInDB(messages)
     temp['content'] = getContent(messages)
     temp['number'] = getNumber(messages)
+    temp['index'] = getIndex(messages)
     print(temp)
     return temp
+
+
+def GetSMSCount():
+    # -*-coding:Latin-1 -*
+    ctx = huaweisms.api.user.quick_login("admin", "admin")
+    print(ctx)
+    # output: <ApiCtx modem_host=192.168.8.1>
+
+    # reading sms
+    count = huaweisms.api.sms.sms_count(
+        ctx
+    )
+    return count['response']['LocalUnread']
+
+
+def ClearSms(sms_index):
+    # -*-coding:Latin-1 -*
+    ctx = huaweisms.api.user.quick_login("admin", "admin")
+    print(ctx)
+    # output: <ApiCtx modem_host=192.168.8.1>
+
+    # deleting last sms
+    huaweisms.api.sms.delete_sms(
+        ctx, sms_index
+    )
 
 
 class SendToLog(threading.Thread, ):
@@ -109,6 +136,10 @@ class SendToLog(threading.Thread, ):
 
 def getMessagerie(messagerie):
     return messagerie['response']['Messages'].items()
+
+
+def getIndex(messagerie):
+    return messagerie['response']['Messages']['Message'][0]['Index']
 
 
 def userInDB(message):
@@ -162,31 +193,47 @@ def build_get_log(severity):
 
 
 if __name__ == '__main__':
-    getsms = GetSMS()  # crée un thread pour le get
-    content = getsms['content']
-    is_authent = getsms['authent']
-    number = getsms['number']
+    while 1 < 2:  # infinite loop
+        local_unread = int(GetSMSCount())
+        if local_unread != 0:
+            getsms = GetSMS()  # crée un thread pour le get
+            content = getsms['content']
+            is_authent = getsms['authent']
+            number = getsms['number']
+            index = int(getsms['index'])
+            ClearSms(index)
+            # --------------- DEBUT DU TRAITEMENT DU GET --------------------------- #
 
-    # --------------- DEBUT DU TRAITEMENT DU GET --------------------------- #
+            if ressource_json['CMD_DEFAULT'] in content and is_authent == 0:
+                if ressource_json['GET_VIEW'] in content:
+                    # send sms display
+                    event_du_send = threading.Event()  # on crée un objet de type Event
+                    event_du_send.clear()  # simple clear de précaution
+                    thread_du_send = SendSMS(event_du_send, number,
+                                             build_get_view(number))  # crée un thread pour le get
+                    thread_du_send.start()  # démarre le thread,
+                    event_du_send.wait()  # on attend la fin du get
 
-    if ressource_json['CMD_DEFAULT'] in content and is_authent == 0:
-        if ressource_json['GET_VIEW'] in content:
-            # send sms display
-            event_du_send = threading.Event()  # on crée un objet de type Event
-            event_du_send.clear()  # simple clear de précaution
-            thread_du_send = SendSMS(event_du_send, number, build_get_view(number))  # crée un thread pour le get
-            thread_du_send.start()  # démarre le thread,
-            event_du_send.wait()  # on attend la fin du get
-
-        if ressource_json['GET_LOG'] in content:
-            # send sms log all
-            if "info" in content:
-                event_du_send = threading.Event()  # on crée un objet de type Event
-                event_du_send.clear()  # simple clear de précaution
-                thread_du_send = SendSMS(event_du_send, number, build_get_log("INFO"))  # crée un thread pour le get
-                thread_du_send.start()  # démarre le thread,
-                event_du_send.wait()  # on attend la fin du get
-            if "warnning" in content:
-                print("warn")
-            if "error" in content:
-                print("error")
+                if ressource_json['GET_LOG'] in content:
+                    # send sms log all
+                    if "info" in content:
+                        event_du_send = threading.Event()  # on crée un objet de type Event
+                        event_du_send.clear()  # simple clear de précaution
+                        thread_du_send = SendSMS(event_du_send, number,
+                                                 build_get_log("INFO"))  # crée un thread pour le get
+                        thread_du_send.start()  # démarre le thread,
+                        event_du_send.wait()  # on attend la fin du get
+                    if "warnning" in content:
+                        event_du_send = threading.Event()  # on crée un objet de type Event
+                        event_du_send.clear()  # simple clear de précaution
+                        thread_du_send = SendSMS(event_du_send, number,
+                                                 build_get_log("WARNING"))  # crée un thread pour le get
+                        thread_du_send.start()  # démarre le thread,
+                        event_du_send.wait()  # on attend la fin du get
+                    if "error" in content:
+                        event_du_send = threading.Event()  # on crée un objet de type Event
+                        event_du_send.clear()  # simple clear de précaution
+                        thread_du_send = SendSMS(event_du_send, number,
+                                                 build_get_log("ERROR"))  # crée un thread pour le get
+                        thread_du_send.start()  # démarre le thread,
+                        event_du_send.wait()  # on attend la fin du get

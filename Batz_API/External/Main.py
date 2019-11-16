@@ -21,10 +21,11 @@ with open('ressouces.json', 'r') as f:
 
 class CheckTemperature(threading.Thread):
 
-    def __init__(self, param1, param2, ):
+    def __init__(self, room1, room2, room3):
         threading.Thread.__init__(self)
-        self.param1 = param1
-        self.param2 = param2
+        self.room1 = room1
+        self.roo2 = room2
+        self.roo3 = room3
         # initialisation de la variable qui portera le résultat
         self.result = None
 
@@ -47,7 +48,6 @@ class SendSMS(threading.Thread, ):
         # -*-coding:Latin-1 -*
         try:
             ctx = huaweisms.api.user.quick_login("admin", "admin")
-            print(ctx)
             try:
                 # sending sms
                 huaweisms.api.sms.send_sms(
@@ -63,7 +63,7 @@ class SendSMS(threading.Thread, ):
                 thread_du_log.start()  # démarre le thread,
                 event_du_log.wait()  # on attend la fin du get
             except EOFError:
-                print("toto")
+                print("Error")
         except ConnectionError:
             event_du_log = threading.Event()  # on crée un objet de type Event
             event_du_log.clear()  # simple clear de précaution
@@ -72,35 +72,28 @@ class SendSMS(threading.Thread, ):
             thread_du_log.start()  # démarre le thread,
             event_du_log.wait()  # on attend la fin du get
 
-        # output: <ApiCtx modem_host=192.168.8.1>
         self.event.set()
 
 
 def GetSMS():
     # -*-coding:Latin-1 -*
     ctx = huaweisms.api.user.quick_login("admin", "admin")
-    print(ctx)
-    # output: <ApiCtx modem_host=192.168.8.1>
 
     # reading sms
     messages = huaweisms.api.sms.get_sms(
         ctx
     )
-    print(messages)
     temp = dict()
     temp['authent'] = userInDB(messages)
     temp['content'] = getContent(messages)
     temp['number'] = getNumber(messages)
     temp['index'] = getIndex(messages)
-    print(temp)
     return temp
 
 
 def GetSMSCount():
     # -*-coding:Latin-1 -*
     ctx = huaweisms.api.user.quick_login("admin", "admin")
-    print(ctx)
-    # output: <ApiCtx modem_host=192.168.8.1>
 
     # reading sms
     count = huaweisms.api.sms.sms_count(
@@ -112,8 +105,6 @@ def GetSMSCount():
 def ClearSms(sms_index):
     # -*-coding:Latin-1 -*
     ctx = huaweisms.api.user.quick_login("admin", "admin")
-    print(ctx)
-    # output: <ApiCtx modem_host=192.168.8.1>
 
     # deleting last sms
     huaweisms.api.sms.delete_sms(
@@ -172,10 +163,22 @@ def getNumber(message):
 
 def build_get_view(number):
     contacts = Batz_API.models.Contact.objects
-    response = ""
+    triggers = Batz_API.models.Trigger.objects
+    response = ressource_json['BATZ_INTRO']
     response += ressource_json['Bonjour'] + " "
     response += contacts.get(contact_phonenumber=number).contact_prenom
     response += "\n"
+    if triggers.get(
+            trigger_name=ressource_json['STATUS_LIB']).trigger_data == "ERROR":
+        response += ressource_json['STATUS_ALERTE_EN_COURS']
+    response += ressource_json['CAPTEUR_EXT'] + str(triggers.get(
+        trigger_name=ressource_json['CAPTEUR_EXT_LIB']).trigger_data) + ressource_json['Celsus'] + "\n"
+    response += ressource_json['CAPTEUR_INT'] + str(triggers.get(
+        trigger_name=ressource_json['CAPTEUR_INT_LIB']).trigger_data) + ressource_json['Celsus'] + "\n"
+    response += ressource_json['CAPTEUR_RAD'] + str(triggers.get(
+        trigger_name=ressource_json['CAPTEUR_RAD_LIB']).trigger_data) + ressource_json['Celsus'] + "\n"
+    response += ressource_json['CHAUFFAGE'] + triggers.get(
+        trigger_name=ressource_json['CHAUFFAGE_LIB']).trigger_data + "\n"
     return response
 
 
@@ -190,6 +193,23 @@ def build_get_log(severity):
             log.log_date.second) + ">"
         response += log.log_data + "\n"
     return response
+
+
+def do_trigger_value_change(trigger_name, set_value):
+    triggers = Batz_API.models.Trigger.objects
+    trigger_last_value = triggers.get(trigger_name=trigger_name)
+    trigger_last_value.trigger_data = set_value
+    trigger_last_value.save()
+
+
+def build_command_change(trigger_name, set_value):
+    triggers = Batz_API.models.Trigger.objects
+    trigger_last_value = triggers.get(trigger_name=trigger_name).trigger_data
+    result = ressource_json['STATUS_CHANGEMENT'] + "pour " + trigger_name
+    result += ressource_json['STATUS_CHANGEMENT_PREVIOUS'] + trigger_last_value + " "
+    result += ressource_json['STATUS_CHANGEMENT_CURRENT'] + set_value + "\n"
+    do_trigger_value_change(trigger_name, set_value)
+    return result
 
 
 if __name__ == '__main__':
@@ -213,7 +233,34 @@ if __name__ == '__main__':
                                              build_get_view(number))  # crée un thread pour le get
                     thread_du_send.start()  # démarre le thread,
                     event_du_send.wait()  # on attend la fin du get
-
+                if ressource_json['SET_CHAUFFAGE'] in content:
+                    if ressource_json['CHAUFFAGE_ON'] in content:
+                        event_du_send = threading.Event()  # on crée un objet de type Event
+                        event_du_send.clear()  # simple clear de précaution
+                        thread_du_send = SendSMS(event_du_send, number,
+                                                 build_command_change(ressource_json['CHAUFFAGE_LIB'],
+                                                                      ressource_json[
+                                                                          'CHAUFFAGE_ON']))
+                        thread_du_send.start()  # démarre le thread,
+                        event_du_send.wait()  # on attend la fin du get
+                    if ressource_json['CHAUFFAGE_OFF'] in content:
+                        event_du_send = threading.Event()  # on crée un objet de type Event
+                        event_du_send.clear()  # simple clear de précaution
+                        thread_du_send = SendSMS(event_du_send, number,
+                                                 build_command_change(ressource_json['CHAUFFAGE_LIB'],
+                                                                      ressource_json[
+                                                                          'CHAUFFAGE_OFF']))
+                        thread_du_send.start()  # démarre le thread,
+                        event_du_send.wait()  # on attend la fin du get
+                    if ressource_json['CHAUFFAGE_AUTO'] in content:
+                        event_du_send = threading.Event()  # on crée un objet de type Event
+                        event_du_send.clear()  # simple clear de précaution
+                        thread_du_send = SendSMS(event_du_send, number,
+                                                 build_command_change(ressource_json['CHAUFFAGE_LIB'],
+                                                                      ressource_json[
+                                                                          'CHAUFFAGE_AUTO']))
+                        thread_du_send.start()  # démarre le thread,
+                        event_du_send.wait()  # on attend la fin du get
                 if ressource_json['GET_LOG'] in content:
                     # send sms log all
                     if "info" in content:
@@ -223,7 +270,7 @@ if __name__ == '__main__':
                                                  build_get_log("INFO"))  # crée un thread pour le get
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-                    if "warnning" in content:
+                    if "warning" in content:
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
                         thread_du_send = SendSMS(event_du_send, number,

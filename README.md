@@ -48,23 +48,4 @@ suivre ces étapes pour installer le programme sur votre carte raspberry
   `pip install -r requirements.txt`
 
 ## UML diagram
-
-```mermaid
-sequenceDiagram
-Sensors->> Main loop: GPIO raw_write
-Main loop-->> Sensors: GPIO read
-Main loop -->> Main loop : Read on GPIO.X register
-Sensors->> Main loop: I2C tx
-Main loop-->> Sensors: I2C rx - read
-Main loop -->> Main loop : Read on I2C register
-Main loop-->>LTE: send current status if an issue is triggered
-Main loop -->> Main loop : Write in log DB
-Client --x LTE: Is my house ok ?
-LTE--x Client: I am good thanks !
-Client --x LTE: I want to change my config
-LTE--x Client: Config changed 
-Note right of Main loop: BDD SQL<br/>LOG + triggers<br/>Contact list<br/>
-
-
-```
-
+//TODO

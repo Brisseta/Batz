@@ -48,4 +48,4 @@ suivre ces étapes pour installer le programme sur votre carte raspberry
   `pip install -r requirements.txt`
 
 ## UML diagram
-//TODO
+see: https://adrienbrisset.fr/smarthome.html

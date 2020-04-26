@@ -6,11 +6,23 @@ from django.db import models
 class Trigger(models.Model):
     trigger_name = models.CharField(max_length=50)
     trigger_data = models.CharField(max_length=10)
+    trigger_date = models.DateTimeField(auto_now=True)
 
     @classmethod
     def create(cls, trigger_name, trigger_data):
         trigger = cls(trigger_name=trigger_name, trigger_data=trigger_data)
         return trigger
+
+
+class TriggerLog(models.Model):
+    trigger_name = models.CharField(max_length=50)
+    trigger_data = models.CharField(max_length=10)
+    trigger_date = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def create(cls, trigger_name, trigger_data):
+        triggerlog = cls(trigger_name=trigger_name, trigger_data=trigger_data)
+        return triggerlog
 
 
 class Log(models.Model):

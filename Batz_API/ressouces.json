@@ -1,8 +1,12 @@
 {
+  "POLLER_UPDATE_MINUTE": "1",
+  "TIMER_HOURS": "2",
+  "MODEM_PASSWD": "admin",
+  "MODEM_IPV4": "10.10.8.122",
   "Bonjour": "Bonjour",
   "BATZ_INTRO": "Ici Batz : `\n",
   "CAPTEUR_EXT": "Température extérieure :",
-  "CAPTEUR_EXT_LIB":"garage",
+  "CAPTEUR_EXT_LIB": "garage",
   "CAPTEUR_INT": "Température intérieure :",
   "CAPTEUR_INT_LIB": "chambre",
   "CAPTEUR_RAD": "Température radiateur :",
@@ -34,7 +38,7 @@
   "GET_LOG": "log",
   "GET_CONF": "conf",
   "SET_CONF": "setconf",
-  "SET_CHAUFFAGE":"chauffage",
+  "SET_CHAUFFAGE": "chauffage",
   "SET_CONF_SEUIL": "sensor",
   "SET_CONF_ANNUAIRE": "contact",
   "LOG_MAX_RESULT": 3

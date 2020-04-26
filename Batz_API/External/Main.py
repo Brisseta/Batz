@@ -2,20 +2,25 @@ import json
 import os
 import threading
 from datetime import date
+import platform  # For getting the operating system name
+import subprocess  # For executing a shell command
 
 import huaweisms.api.sms
 import huaweisms.api.user
 import huaweisms.api.wlan
+import win32timezone
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Batz.settings")
 from django.core.wsgi import get_wsgi_application
 
 application = get_wsgi_application()
 import Batz_API.models
+from Batz_API.autoMode import AutoMode
 
+global connetivity_context
 content_global = ""
 user_in_db_global = 1
-with open('ressouces.json', 'r') as f:
+with open('../ressouces.json', 'r') as f:
     ressource_json = json.load(f)
 
 
@@ -46,70 +51,100 @@ class SendSMS(threading.Thread, ):
 
     def run(self):
         # -*-coding:Latin-1 -*
-        try:
-            ctx = huaweisms.api.user.quick_login("admin", "admin")
+        if not connetivity_context:
+            print(just_log("SENDSMS function failed because 4G dongle cannot be reached"))
+        else:
             try:
-                # sending sms
-                huaweisms.api.sms.send_sms(
-                    ctx, Batz_API.models.Contact.objects.get(
-                        contact_phonenumber=self.contact).contact_phonenumber,
-                    self.text
-                )
+                ctx = huaweisms.api.user.quick_login("admin", ressource_json["MODEM_PASSWD"])
+                try:
+                    # sending sms
+                    huaweisms.api.sms.send_sms(
+                        ctx, Batz_API.models.Contact.objects.get(
+                            contact_phonenumber=self.contact).contact_phonenumber,
+                        self.text
+                    )
+                    event_du_log = threading.Event()  # on crée un objet de type Event
+                    event_du_log.clear()  # simple clear de précaution
+                    thread_du_log = SendToLog(event_du_log, severity="INFO",
+                                              content="sending to" + Batz_API.models.Contact.objects.get(
+                                                  contact_phonenumber=self.contact).contact_phonenumber + " \n text : " + self.text)
+                    thread_du_log.start()  # démarre le thread,
+                    event_du_log.wait()  # on attend la fin du get
+                except EOFError:
+                    print("Error")
+            except ConnectionError:
                 event_du_log = threading.Event()  # on crée un objet de type Event
                 event_du_log.clear()  # simple clear de précaution
-                thread_du_log = SendToLog(event_du_log, severity="INFO",
-                                          content="sending to" + Batz_API.models.Contact.objects.get(
-                                              contact_phonenumber=self.contact).contact_phonenumber + " \n text : " + self.text)
+                thread_du_log = SendToLog(event_du_log, severity="ERROR", content=
+                "Connection au dongle interrompue")
                 thread_du_log.start()  # démarre le thread,
                 event_du_log.wait()  # on attend la fin du get
-            except EOFError:
-                print("Error")
-        except ConnectionError:
-            event_du_log = threading.Event()  # on crée un objet de type Event
-            event_du_log.clear()  # simple clear de précaution
-            thread_du_log = SendToLog(event_du_log, severity="ERROR", content=
-            "Connection au dongle interrompue")
-            thread_du_log.start()  # démarre le thread,
-            event_du_log.wait()  # on attend la fin du get
 
         self.event.set()
 
 
-def GetSMS():
-    # -*-coding:Latin-1 -*
-    ctx = huaweisms.api.user.quick_login("admin", "admin")
+def CheckConnectivity():
+    param = '-n' if platform.system().lower() == 'windows' else '-c'
+    command = ['ping', param, '1', ressource_json['MODEM_IPV4']]
+    return subprocess.call(command) == 0
 
-    # reading sms
-    messages = huaweisms.api.sms.get_sms(
-        ctx
-    )
-    temp = dict()
-    temp['authent'] = userInDB(messages)
-    temp['content'] = getContent(messages)
-    temp['number'] = getNumber(messages)
-    temp['index'] = getIndex(messages)
-    return temp
+
+def GetSMS():
+    if not connetivity_context:
+        print(just_log("GETSMS function failed , working on last SMS content"))
+        temp = dict()
+        temp['authent'] = 0
+        temp['content'] = "Batz set chauffage auto"
+        temp['number'] = "0666669261"
+        temp['index'] = 12102
+        print(just_log("last sms content : "))
+        print(temp)
+        return temp
+
+    else:
+        # -*-coding:Latin-1 -*
+        ctx = huaweisms.api.user.quick_login("admin", ressource_json["MODEM_PASSWD"])
+
+        # reading sms
+        messages = huaweisms.api.sms.get_sms(
+            ctx
+        )
+        temp = dict()
+        temp['authent'] = userInDB(messages)
+        temp['content'] = getContent(messages)
+        temp['number'] = getNumber(messages)
+        temp['index'] = getIndex(messages)
+        return temp
 
 
 def GetSMSCount():
     # -*-coding:Latin-1 -*
-    ctx = huaweisms.api.user.quick_login("admin", "admin")
+    if not connetivity_context:
+        print(just_log("GETSMSCOUNT function failed : check if your 4G dongle is online"))
+        return 1
+    else:
 
-    # reading sms
-    count = huaweisms.api.sms.sms_count(
-        ctx
-    )
-    return count['response']['LocalUnread']
+        ctx = huaweisms.api.user.quick_login("admin", ressource_json["MODEM_PASSWD"])
+
+        # reading sms
+        count = huaweisms.api.sms.sms_count(
+            ctx
+        )
+        return count['response']['LocalUnread']
 
 
 def ClearSms(sms_index):
-    # -*-coding:Latin-1 -*
-    ctx = huaweisms.api.user.quick_login("admin", "admin")
+    if not connetivity_context:
+        print(just_log("CLEARSMS function failed because 4G dongle cannot be reached"))
 
-    # deleting last sms
-    huaweisms.api.sms.delete_sms(
-        ctx, sms_index
-    )
+    else:
+        # -*-coding:Latin-1 -*
+        ctx = huaweisms.api.user.quick_login("admin", ressource_json["MODEM_PASSWD"])
+
+        # deleting last sms
+        huaweisms.api.sms.delete_sms(
+            ctx, sms_index
+        )
 
 
 class SendToLog(threading.Thread, ):
@@ -209,78 +244,82 @@ def build_command_change(trigger_name, set_value):
     result += ressource_json['STATUS_CHANGEMENT_PREVIOUS'] + trigger_last_value + " "
     result += ressource_json['STATUS_CHANGEMENT_CURRENT'] + set_value + "\n"
     do_trigger_value_change(trigger_name, set_value)
+    print(just_log("Update on " + trigger_name + " /last value : " + trigger_last_value + " /new value : " + set_value))
     return result
+
+
+def just_log(some_text):
+    return win32timezone.now().strftime("%d/%m/%Y %H:%M:%S") + " : " + some_text
 
 
 if __name__ == '__main__':
     while 1 < 2:  # infinite loop
+        connetivity_context = CheckConnectivity()
         local_unread = int(GetSMSCount())
         if local_unread != 0:
             getsms = GetSMS()  # crée un thread pour le get
-            content = getsms['content']
-            is_authent = getsms['authent']
-            number = getsms['number']
-            index = int(getsms['index'])
-            ClearSms(index)
             # --------------- DEBUT DU TRAITEMENT DU GET --------------------------- #
 
-            if ressource_json['CMD_DEFAULT'] in content and is_authent == 0:
-                if ressource_json['GET_VIEW'] in content:
+            if ressource_json['CMD_DEFAULT'] in getsms['content'] and getsms['authent'] == 0:
+                if ressource_json['GET_VIEW'] in getsms['content']:
                     # send sms display
                     event_du_send = threading.Event()  # on crée un objet de type Event
                     event_du_send.clear()  # simple clear de précaution
-                    thread_du_send = SendSMS(event_du_send, number,
-                                             build_get_view(number))  # crée un thread pour le get
+                    thread_du_send = SendSMS(event_du_send, getsms['number'],
+                                             build_get_view(getsms['number']))  # crée un thread pour le get
                     thread_du_send.start()  # démarre le thread,
                     event_du_send.wait()  # on attend la fin du get
-                if ressource_json['SET_CHAUFFAGE'] in content:
-                    if ressource_json['CHAUFFAGE_ON'] in content:
+                if ressource_json['SET_CHAUFFAGE'] in getsms['content']:
+                    if ressource_json['CHAUFFAGE_ON'] in getsms['content'].upper():
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, number,
+                        thread_du_send = SendSMS(event_du_send, getsms['number'],
                                                  build_command_change(ressource_json['CHAUFFAGE_LIB'],
                                                                       ressource_json[
                                                                           'CHAUFFAGE_ON']))
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-                    if ressource_json['CHAUFFAGE_OFF'] in content:
+                    if ressource_json['CHAUFFAGE_OFF'] in getsms['content'].upper():
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, number,
+                        thread_du_send = SendSMS(event_du_send, getsms['number'],
                                                  build_command_change(ressource_json['CHAUFFAGE_LIB'],
                                                                       ressource_json[
                                                                           'CHAUFFAGE_OFF']))
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-                    if ressource_json['CHAUFFAGE_AUTO'] in content:
+                    if ressource_json['CHAUFFAGE_AUTO'] in getsms['content'].upper():
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, number,
+                        thread_du_send = SendSMS(event_du_send, getsms['number'],
                                                  build_command_change(ressource_json['CHAUFFAGE_LIB'],
                                                                       ressource_json[
                                                                           'CHAUFFAGE_AUTO']))
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-                if ressource_json['GET_LOG'] in content:
+                        autoMode = AutoMode()
+                        autoMode.start()
+
+                if ressource_json['GET_LOG'] in getsms['content']:
                     # send sms log all
-                    if "info" in content:
+                    if "info" in getsms['content']:
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, number,
+                        thread_du_send = SendSMS(event_du_send, getsms['number'],
                                                  build_get_log("INFO"))  # crée un thread pour le get
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-                    if "warning" in content:
+                    if "warning" in getsms['content']:
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, number,
+                        thread_du_send = SendSMS(event_du_send, getsms['number'],
                                                  build_get_log("WARNING"))  # crée un thread pour le get
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-                    if "error" in content:
+                    if "error" in getsms['content']:
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, number,
+                        thread_du_send = SendSMS(event_du_send, getsms['number'],
                                                  build_get_log("ERROR"))  # crée un thread pour le get
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get

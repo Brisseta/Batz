@@ -1,14 +1,12 @@
 import json
 import os
-import threading
-from datetime import date
 import platform  # For getting the operating system name
 import subprocess  # For executing a shell command
+import threading
 
 import huaweisms.api.sms
 import huaweisms.api.user
 import huaweisms.api.wlan
-import win32timezone
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Batz.settings")
 from django.core.wsgi import get_wsgi_application
@@ -16,71 +14,13 @@ from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
 import Batz_API.models
 from Batz_API.autoMode import AutoMode
+from Batz_API.Common import just_log, SendSMS, SendToLog
 
 global connetivity_context
 content_global = ""
 user_in_db_global = 1
 with open('../ressouces.json', 'r') as f:
     ressource_json = json.load(f)
-
-
-class CheckTemperature(threading.Thread):
-
-    def __init__(self, room1, room2, room3):
-        threading.Thread.__init__(self)
-        self.room1 = room1
-        self.roo2 = room2
-        self.roo3 = room3
-        # initialisation de la variable qui portera le résultat
-        self.result = None
-
-    def run(self):
-        """Lance le check status en tâche de fond et stocke le résultat en BDD dans la table trigger"""
-
-    def result(self):
-        """Renvoie le résultat lorsqu'il est connu"""
-        return self.result
-
-
-class SendSMS(threading.Thread, ):
-    def __init__(self, event, contact, text):  # event = objet Event
-        threading.Thread.__init__(self)  # = donnée supplémentaire
-        self.event = event  # on garde un accès à l'objet Event
-        self.contact = contact
-        self.text = text
-
-    def run(self):
-        # -*-coding:Latin-1 -*
-        if not connetivity_context:
-            print(just_log("SENDSMS function failed because 4G dongle cannot be reached"))
-        else:
-            try:
-                ctx = huaweisms.api.user.quick_login("admin", ressource_json["MODEM_PASSWD"])
-                try:
-                    # sending sms
-                    huaweisms.api.sms.send_sms(
-                        ctx, Batz_API.models.Contact.objects.get(
-                            contact_phonenumber=self.contact).contact_phonenumber,
-                        self.text
-                    )
-                    event_du_log = threading.Event()  # on crée un objet de type Event
-                    event_du_log.clear()  # simple clear de précaution
-                    thread_du_log = SendToLog(event_du_log, severity="INFO",
-                                              content="sending to" + Batz_API.models.Contact.objects.get(
-                                                  contact_phonenumber=self.contact).contact_phonenumber + " \n text : " + self.text)
-                    thread_du_log.start()  # démarre le thread,
-                    event_du_log.wait()  # on attend la fin du get
-                except EOFError:
-                    print("Error")
-            except ConnectionError:
-                event_du_log = threading.Event()  # on crée un objet de type Event
-                event_du_log.clear()  # simple clear de précaution
-                thread_du_log = SendToLog(event_du_log, severity="ERROR", content=
-                "Connection au dongle interrompue")
-                thread_du_log.start()  # démarre le thread,
-                event_du_log.wait()  # on attend la fin du get
-
-        self.event.set()
 
 
 def CheckConnectivity():
@@ -145,19 +85,6 @@ def ClearSms(sms_index):
         huaweisms.api.sms.delete_sms(
             ctx, sms_index
         )
-
-
-class SendToLog(threading.Thread, ):
-    def __init__(self, event, severity, content):  # event = objet Event
-        threading.Thread.__init__(self)  # = donnée supplémentaire
-        self.event = event  # on garde un accès à l'objet Event
-        self.severity = severity
-        self.content = content
-
-    def run(self):
-        tempLog = Batz_API.models.Log.create(log_severity=self.severity, log_date=date.today(), log_data=self.content)
-        tempLog.save()
-        self.event.set()
 
 
 def getMessagerie(messagerie):
@@ -248,10 +175,6 @@ def build_command_change(trigger_name, set_value):
     return result
 
 
-def just_log(some_text):
-    return win32timezone.now().strftime("%d/%m/%Y %H:%M:%S") + " : " + some_text
-
-
 if __name__ == '__main__':
     while 1 < 2:  # infinite loop
         connetivity_context = CheckConnectivity()
@@ -265,7 +188,7 @@ if __name__ == '__main__':
                     # send sms display
                     event_du_send = threading.Event()  # on crée un objet de type Event
                     event_du_send.clear()  # simple clear de précaution
-                    thread_du_send = SendSMS(event_du_send, getsms['number'],
+                    thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
                                              build_get_view(getsms['number']))  # crée un thread pour le get
                     thread_du_send.start()  # démarre le thread,
                     event_du_send.wait()  # on attend la fin du get
@@ -273,7 +196,7 @@ if __name__ == '__main__':
                     if ressource_json['CHAUFFAGE_ON'] in getsms['content'].upper():
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, getsms['number'],
+                        thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
                                                  build_command_change(ressource_json['CHAUFFAGE_LIB'],
                                                                       ressource_json[
                                                                           'CHAUFFAGE_ON']))
@@ -282,16 +205,18 @@ if __name__ == '__main__':
                     if ressource_json['CHAUFFAGE_OFF'] in getsms['content'].upper():
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, getsms['number'],
+                        thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
                                                  build_command_change(ressource_json['CHAUFFAGE_LIB'],
                                                                       ressource_json[
                                                                           'CHAUFFAGE_OFF']))
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
+
+
                     if ressource_json['CHAUFFAGE_AUTO'] in getsms['content'].upper():
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, getsms['number'],
+                        thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
                                                  build_command_change(ressource_json['CHAUFFAGE_LIB'],
                                                                       ressource_json[
                                                                           'CHAUFFAGE_AUTO']))
@@ -305,21 +230,21 @@ if __name__ == '__main__':
                     if "info" in getsms['content']:
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, getsms['number'],
+                        thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
                                                  build_get_log("INFO"))  # crée un thread pour le get
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
                     if "warning" in getsms['content']:
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, getsms['number'],
+                        thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
                                                  build_get_log("WARNING"))  # crée un thread pour le get
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
                     if "error" in getsms['content']:
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(event_du_send, getsms['number'],
+                        thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
                                                  build_get_log("ERROR"))  # crée un thread pour le get
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get

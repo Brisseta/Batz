@@ -1,9 +1,8 @@
+import os
+import time
 from typing import Any
 
 import win32timezone
-import os
-import time
-
 from rest_framework.utils import json
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Batz.settings")
@@ -11,6 +10,7 @@ from django.core.wsgi import get_wsgi_application
 
 application = get_wsgi_application()
 import Batz_API
+from Batz_API.Common import just_log
 from Batz_API.models import Trigger, TriggerLog
 
 with open('../ressouces.json', 'r') as f:
@@ -30,12 +30,12 @@ class AutoMode:
     def start(self):
         while self.chauffage_status_obj.trigger_data == 'AUTO':
             self.checkup()
-            self.print_status()
             self.refresh()
         self.stop()
         # notify at the end  TODO
 
     def refresh(self):
+        self.print_status()
         self.relai1_obj = self.triggers.get(trigger_name='relai1')
         self.relai2_obj = self.triggers.get(trigger_name='relai2')
         self.thermostat_obj = self.triggers.get(trigger_name='termostat')
@@ -65,14 +65,14 @@ class AutoMode:
 
     def background_poller_wait(self):
         # sleep till the end of TIMER1
-        print("Sleeping for %d Hours" % int(ressource_json['POLLER_UPDATE_MINUTE']))
+        print("Sleeping for %d Minutes" % int(ressource_json['POLLER_UPDATE_MINUTE']))
         time.sleep(int(ressource_json['POLLER_UPDATE_MINUTE']) * 60)
-        self.timer1_obj.trigger_data = "OFF"
+        self.timer2_obj.trigger_data = "OFF"
 
     def print_status(self):
         print_res = {"relai1": self.relai1_obj.trigger_data, "relai2": self.relai2_obj.trigger_data,
                      "thermostat": self.thermostat_obj.trigger_data, "timer1": self.timer1_obj.trigger_data}
-        print("Statut en date du %s" % win32timezone.now().strftime("%d/%m/%Y %H:%M:%S"))
+        print("Status on %s" % win32timezone.now().strftime("%d/%m/%Y %H:%M:%S"))
         for status in print_res.items():
             print(status)
 
@@ -82,6 +82,8 @@ class AutoMode:
                                    trigger_data=trigger.__getattribute__("trigger_data"),
                                    trigger_date=trigger.__getattribute__("trigger_date"))
             to_commit.save()
+        print(just_log(
+            "sucessfully pushed " + str(sum(1 for _ in self.triggers.iterator())) + " rows to TriggerLog table"))
 
     def checkup(self):
         # tant que le relai 1 fonctionne et le relai 2 est éteint

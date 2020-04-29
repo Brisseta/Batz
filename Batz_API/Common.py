@@ -1,3 +1,4 @@
+import os
 import threading
 from datetime import date
 import time
@@ -8,11 +9,16 @@ import huaweisms.api.wlan
 import win32timezone
 from rest_framework.utils import json
 
+# from w1thermsensor import W1ThermSensor
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Batz.settings")
+from django.core.wsgi import get_wsgi_application
+
+application = get_wsgi_application()
 import Batz_API
 from Batz_API import models
 from Batz_API.models import TriggerLog
 
-with open('../ressouces.json', 'r') as f:
+with open('./ressouces.json', 'r') as f:
     ressource_json = json.load(f)
 
 
@@ -35,21 +41,48 @@ def change_trigger_status(trigger, value):
 
 
 class CheckTemperature(threading.Thread):
+    """  Supported sensors are:
+        * DS18S20
+        * DS1822
+        * DS18B20
+        * DS1825
+        * DS28EA00
+        * MAX31850K
 
-    def __init__(self, room1, room2, room3):
+    Supported temperature units are:
+        * Kelvin
+        * Celsius
+        * Fahrenheit
+    """
+
+    def __init__(self):
         threading.Thread.__init__(self)
-        self.room1 = room1
-        self.roo2 = room2
-        self.roo3 = room3
-        # initialisation de la variable qui portera le résultat
-        self.result = None
+        self.sensors = []
 
     def run(self):
-        """Lance le check status en tâche de fond et stocke le résultat en BDD dans la table trigger"""
+        """Lance le check status en tâche de fond """
+        # for sensor in W1ThermSensor.get_available_sensors():
+        #     self.sensors.append({"type": sensor.type, "id": sensor.id, "name": self.identify(sensor.id),
+        #                          "value": sensor.get_temperature()})
+        #     print("Sensor %s has temperature %.2f" % (sensor.id, sensor.get_temperature()))
+        self.notify()
 
-    def result(self):
-        """Renvoie le résultat lorsqu'il est connu"""
-        return self.result
+    def identify(self, sensor_id):
+        for label in ressource_json:
+            if ressource_json[str(label)] == sensor_id:
+                return str(label).split('_')[0].lower()
+
+    def notify(self):
+        """stocke le résultat en BDD dans la table triggerLog"""
+        print(just_log("For %d sensors" % sum(1 for _ in self.sensors)))
+        for sensor in self.sensors:
+            print(just_log("sensor %s %s %s"), sensor['name'], sensor['type'], sensor['value'])
+            try:
+                matched_trigger = models.Trigger.objects.get(trigger_name=sensor['name'])
+                matched_trigger.trigger_data = sensor['value']
+                matched_trigger.save(force_update=True)
+            except:
+                print("error")
 
 
 class BinaryInput(threading.Thread):
@@ -156,3 +189,12 @@ class SendToLog(threading.Thread, ):
         tempLog = Batz_API.models.Log.create(log_severity=self.severity, log_date=date.today(), log_data=self.content)
         tempLog.save()
         self.event.set()
+
+
+if __name__ == '__main__':
+    check = CheckTemperature()
+    check.identify("000155689")
+    try:
+        matched_trigger = models.Trigger.objects.get(trigger_name='toto')
+    except:
+        print("error")

@@ -157,20 +157,12 @@ def build_get_log(severity):
     return response
 
 
-def do_trigger_value_change(trigger_name, set_value):
-    triggers = Batz_API.models.Trigger.objects
-    trigger_last_value = triggers.get(trigger_name=trigger_name)
-    trigger_last_value.trigger_data = set_value
-    trigger_last_value.save()
-
-
 def build_command_change(trigger_name, set_value):
     triggers = Batz_API.models.Trigger.objects
     trigger_last_value = triggers.get(trigger_name=trigger_name).trigger_data
     result = ressource_json['STATUS_CHANGEMENT'] + "pour " + trigger_name
     result += ressource_json['STATUS_CHANGEMENT_PREVIOUS'] + trigger_last_value + " "
     result += ressource_json['STATUS_CHANGEMENT_CURRENT'] + set_value + "\n"
-    do_trigger_value_change(trigger_name, set_value)
     print(just_log("Update on " + trigger_name + " /last value : " + trigger_last_value + " /new value : " + set_value))
     return result
 
@@ -194,6 +186,7 @@ if __name__ == '__main__':
                     event_du_send.wait()  # on attend la fin du get
                 if ressource_json['SET_CHAUFFAGE'] in getsms['content']:
                     if ressource_json['CHAUFFAGE_ON'] in getsms['content'].upper():
+                        Batz_API.Common.change_to_on_mode()
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
                         thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
@@ -202,7 +195,9 @@ if __name__ == '__main__':
                                                                           'CHAUFFAGE_ON']))
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
+                        Batz_API.Common.change_trigger_status(trigger_name='chauffage', value='ON')
                     if ressource_json['CHAUFFAGE_OFF'] in getsms['content'].upper():
+                        Batz_API.Common.change_to_off_mode()
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
                         thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
@@ -211,7 +206,7 @@ if __name__ == '__main__':
                                                                           'CHAUFFAGE_OFF']))
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-
+                        Batz_API.Common.change_trigger_status(trigger_name='chauffage', value='OFF')
 
                     if ressource_json['CHAUFFAGE_AUTO'] in getsms['content'].upper():
                         event_du_send = threading.Event()  # on crée un objet de type Event
@@ -222,8 +217,7 @@ if __name__ == '__main__':
                                                                           'CHAUFFAGE_AUTO']))
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-                        autoMode = AutoMode()
-                        autoMode.start()
+                        Batz_API.Common.change_to_auto_mode()
 
                 if ressource_json['GET_LOG'] in getsms['content']:
                     # send sms log all
@@ -248,3 +242,4 @@ if __name__ == '__main__':
                                                  build_get_log("ERROR"))  # crée un thread pour le get
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
+        break

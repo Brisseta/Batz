@@ -10,6 +10,7 @@ import win32timezone
 from rest_framework.utils import json
 
 # from w1thermsensor import W1ThermSensor
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Batz.settings")
 from django.core.wsgi import get_wsgi_application
 
@@ -18,12 +19,35 @@ import Batz_API
 from Batz_API import models
 from Batz_API.models import TriggerLog
 
-with open('./ressouces.json', 'r') as f:
+with open('../ressouces.json', 'r') as f:
     ressource_json = json.load(f)
+
+global my_AutoMode
 
 
 def just_log(some_text):
     return win32timezone.now().strftime("%d/%m/%Y %H:%M:%S") + " : " + some_text
+
+
+def change_to_off_mode():
+    if get_trigger_data(trigger_name='chauffage') == 'AUTO':
+        my_AutoMode.stop()
+    change_trigger_status(trigger_name='relai1', value='OFF')
+    change_trigger_status(trigger_name='relai2', value='OFF')
+
+
+def change_to_on_mode():
+    if get_trigger_data(trigger_name='chauffage') == 'AUTO':
+        my_AutoMode.stop()
+    change_trigger_status(trigger_name='relai1', value='ON')
+    change_trigger_status(trigger_name='relai2', value='ON')
+
+
+def change_to_auto_mode():
+    from Batz_API.autoMode import AutoMode
+    change_trigger_status(trigger_name='chauffage', value='AUTO')
+    my_AutoMode = AutoMode()
+    my_AutoMode.start()
 
 
 def commit(trigger):
@@ -33,11 +57,16 @@ def commit(trigger):
     to_commit.save()
 
 
-def change_trigger_status(trigger, value):
-    trigger = models.Trigger.objects.get(trigger_name=trigger)
+def change_trigger_status(trigger_name, value):
+    trigger = models.Trigger.objects.get(trigger_name=trigger_name)
     trigger.trigger_data = value
     trigger.save(force_update=True)
     commit(trigger)
+
+
+def get_trigger_data(trigger_name):
+    trigger = models.Trigger.objects.get(trigger_name=trigger_name)
+    return trigger.trigger_data
 
 
 class CheckTemperature(threading.Thread):
@@ -65,6 +94,10 @@ class CheckTemperature(threading.Thread):
         #     self.sensors.append({"type": sensor.type, "id": sensor.id, "name": self.identify(sensor.id),
         #                          "value": sensor.get_temperature()})
         #     print("Sensor %s has temperature %.2f" % (sensor.id, sensor.get_temperature()))
+        if self.is_below_trigger(trigger_name='interieur'):
+            change_trigger_status(trigger_name='timer2', value='ON')
+        elif self.is_above_trigger(trigger_name='interieur') and get_trigger_data(trigger_name='timer2') == 'ON':
+            change_trigger_status(trigger_name='timer2', value='OFF')
         self.notify()
 
     def identify(self, sensor_id):
@@ -72,35 +105,54 @@ class CheckTemperature(threading.Thread):
             if ressource_json[str(label)] == sensor_id:
                 return str(label).split('_')[0].lower()
 
+    def is_above_trigger(self, trigger_name):
+        to_compare = models.TriggerLog.objects.first(trigger_name=trigger_name)
+        trigger = models.Trigger.objects.first(trigger_name=trigger_name)
+        return float(to_compare.trigger_data) > float(trigger.trigger_data)
+
+    def is_below_trigger(self, trigger_name):
+        return not self.is_above_trigger(trigger_name)
+
     def notify(self):
         """stocke le résultat en BDD dans la table triggerLog"""
         print(just_log("For %d sensors" % sum(1 for _ in self.sensors)))
         for sensor in self.sensors:
             print(just_log("sensor %s %s %s"), sensor['name'], sensor['type'], sensor['value'])
             try:
-                matched_trigger = models.Trigger.objects.get(trigger_name=sensor['name'])
-                matched_trigger.trigger_data = sensor['value']
-                matched_trigger.save(force_update=True)
+                new_trigger = models.TriggerLog(trigger_name=sensor['name'], trigger_data=sensor['value'])
+                new_trigger.save(force_insert=True)
             except:
-                print("error")
+                print(just_log("Unrecognised sensor name") % sensor['name'])
 
 
 class BinaryInput(threading.Thread):
 
-    def __init__(self, room1, room2, room3):
+    def __init__(self, gpio, lib):
         threading.Thread.__init__(self)
-        self.room1 = room1
-        self.roo2 = room2
-        self.roo3 = room3
-        # initialisation de la variable qui portera le résultat
-        self.result = None
+        self.gpio = gpio
+        self.lib = lib
+        self.state = ''
 
     def run(self):
-        """Lance le check status en tâche de fond et stocke le résultat en BDD dans la table trigger"""
+        # self.setmode(GPIO.BCM)
+        # GPIO.setup(self.gpio,GPIO.IN)
+        # if GPIO.input(self.gpio) == True
+        #     self.state = 'ON'
+        # elif GPIO.input(self.gpio) == False
+        #     self.state = 'OFF'
+        # time.sleep(1)
+        self.notify()
+        return 0
 
-    def result(self):
-        """Renvoie le résultat lorsqu'il est connu"""
-        return self.result
+    def notify(self):
+        event_du_log = threading.Event()  # on crée un objet de type Event
+        event_du_log.clear()  # simple clear de précaution
+        thread_du_log = SendToLog(event_du_log, severity="INFO",
+                                  content=just_log("Got state " + self.state + " for " + self.lib))
+        thread_du_log.start()  # démarre le thread,
+        event_du_log.wait()  # on attend la fin du get
+        #         Testing
+        print(just_log("Got state  " + self.state + " for " + self.lib))
 
 
 class BinaryOutput(threading.Thread):

@@ -86,6 +86,7 @@ class AutoMode:
             "sucessfully pushed " + str(sum(1 for _ in self.triggers.iterator())) + " rows to TriggerLog table"))
 
     def checkup(self):
+        relai1_ctrl, relai2_ctrl = None, None
         # tant que le relai 1 fonctionne et le relai 2 est éteint
         if self.relai1_obj.trigger_data == 'ON' and self.relai2_obj.trigger_data == 'OFF':
             # si le timer est écoulé le termostat se met en marche
@@ -94,6 +95,8 @@ class AutoMode:
                 self.timer1_obj.trigger_data = 'ON'
                 # j'active le relai 2
                 self.relai2_obj.trigger_data = 'ON'
+                relai2_ctrl = Batz_API.Common.BinaryOutput(gpio=ressource_json('RELAI1_CTRL_PIN'),
+                                                           lib='Output relai1', state=1).start()
                 # Lance le timer
                 self.background_timer()
                 # A la fin du timer je désactive le relai 2 et passe le termostat à OFF

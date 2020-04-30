@@ -13,12 +13,12 @@ from django.core.wsgi import get_wsgi_application
 
 application = get_wsgi_application()
 import Batz_API.models
-from Batz_API.autoMode import AutoMode
-from Batz_API.Common import just_log, SendSMS, SendToLog
+from Batz_API.Common import just_log, SendSMS, SendToLog, check_for_alert
 
 global connetivity_context
 content_global = ""
 user_in_db_global = 1
+trigger_list_global = []
 with open('../ressouces.json', 'r') as f:
     ressource_json = json.load(f)
 
@@ -34,7 +34,7 @@ def GetSMS():
         print(just_log("GETSMS function failed , working on last SMS content"))
         temp = dict()
         temp['authent'] = 0
-        temp['content'] = "Batz set chauffage auto"
+        temp['content'] = "Batz ?"
         temp['number'] = "0666669261"
         temp['index'] = 12102
         print(just_log("last sms content : "))
@@ -133,14 +133,14 @@ def build_get_view(number):
     if triggers.get(
             trigger_name=ressource_json['STATUS_LIB']).trigger_data == "ERROR":
         response += ressource_json['STATUS_ALERTE_EN_COURS']
-    response += ressource_json['CAPTEUR_EXT'] + str(triggers.get(
-        trigger_name=ressource_json['CAPTEUR_EXT_LIB']).trigger_data) + ressource_json['Celsus'] + "\n"
-    response += ressource_json['CAPTEUR_INT'] + str(triggers.get(
-        trigger_name=ressource_json['CAPTEUR_INT_LIB']).trigger_data) + ressource_json['Celsus'] + "\n"
-    response += ressource_json['CAPTEUR_RAD'] + str(triggers.get(
-        trigger_name=ressource_json['CAPTEUR_RAD_LIB']).trigger_data) + ressource_json['Celsus'] + "\n"
-    response += ressource_json['CHAUFFAGE'] + triggers.get(
-        trigger_name=ressource_json['CHAUFFAGE_LIB']).trigger_data + "\n"
+    response += ressource_json['CAPTEUR_EXT'] + str(Batz_API.Common.get_trigger_data(
+        trigger_name=ressource_json['CAPTEUR_EXT_LIB']).lower()) + ressource_json['Celsus'] + "\n"
+    response += ressource_json['CAPTEUR_INT'] + str(Batz_API.Common.get_trigger_data(
+        trigger_name=ressource_json['CAPTEUR_INT_LIB'])) + ressource_json['Celsus'] + "\n"
+    response += ressource_json['CAPTEUR_RAD'] + str(Batz_API.Common.get_trigger_data(
+        trigger_name=ressource_json['CAPTEUR_RAD_LIB'])) + ressource_json['Celsus'] + "\n"
+    response += ressource_json['CHAUFFAGE'] + Batz_API.Common.get_trigger_data(
+        trigger_name=ressource_json['CHAUFFAGE_LIB']) + "\n"
     return response
 
 
@@ -168,9 +168,11 @@ def build_command_change(trigger_name, set_value):
 
 
 if __name__ == '__main__':
+
     while 1 < 2:  # infinite loop
         connetivity_context = CheckConnectivity()
         local_unread = int(GetSMSCount())
+        Batz_API.Common.check_for_alert()
         if local_unread != 0:
             getsms = GetSMS()  # crée un thread pour le get
             # --------------- DEBUT DU TRAITEMENT DU GET --------------------------- #

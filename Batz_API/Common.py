@@ -45,8 +45,9 @@ def check_for_alert():
             change_trigger_status("was_alerted", value="TRUE")
         elif get_trigger_data('pompe') == "0":
             #             TODO send fin inondation alert
-            print(just_log("innondation detectée"))
-            change_trigger_status("was_alerted", value="TRUE")
+            print(just_log("fin innondation"))
+            change_trigger_status("was_alerted", value="FALSE")
+            change_trigger_status("status", value="NONE")
         if get_trigger_data("secteur") == "1":
             #             TODO send secteur fault alert
             print(just_log("coupure courant detectée"))
@@ -54,6 +55,8 @@ def check_for_alert():
         elif get_trigger_data("secteur") == "0":
             #             TODO send secteur fault alert
             print(just_log("Fin de coupure courant "))
+            change_trigger_status("was_alerted", value="FALSE")
+            change_trigger_status("status", value="NONE")
 
 
 def just_log(some_text):
@@ -61,9 +64,12 @@ def just_log(some_text):
 
 
 def do_check_temp():
-    check = CheckTemperature()
-    check.run()
-    print(just_log("Getting temperature"))
+    event = threading.Event()  # on crée un objet de type Event
+    event.clear()  # simple clear de précaution
+    thread = CheckTemperature(event)
+    thread.run()
+    event.wait()
+    print(just_log("Getting temperature done"))
 
 
 def change_to_off_mode():
@@ -86,9 +92,13 @@ def change_to_on_mode():
 
 def change_to_auto_mode():
     from Batz_API.autoMode import AutoMode
+    event = threading.Event()  # on crée un objet de type Event
+    event.clear()  # simple clear de précaution
     change_trigger_status(trigger_name='chauffage', value='AUTO')
     my_AutoMode = AutoMode()
     my_AutoMode.start()
+    event.wait()
+    print(just_log("Fin du automode"))
 
 
 def commit(trigger):
@@ -125,9 +135,10 @@ class CheckTemperature(threading.Thread):
         * Fahrenheit
     """
 
-    def __init__(self):
+    def __init__(self, event):
         threading.Thread.__init__(self)
         self.sensors = []
+        self.event = event
 
     def run(self):
         """Lance le check status en tâche de fond """
@@ -141,6 +152,7 @@ class CheckTemperature(threading.Thread):
                 trigger_name='timer2') == 'ON' and get_trigger_data("chauffage") == "AUTO":
             change_trigger_status(trigger_name='timer2', value='OFF')
         self.notify()
+        self.event.set()
 
     def identify(self, sensor_id):
         for label in ressource_json:
@@ -169,8 +181,9 @@ class CheckTemperature(threading.Thread):
 
 class BinaryInput(threading.Thread):
 
-    def __init__(self, gpio, lib):
+    def __init__(self, event, gpio, lib):
         threading.Thread.__init__(self)
+        self.event = event
         self.gpio = gpio
         self.lib = lib
         self.state = ''
@@ -184,7 +197,7 @@ class BinaryInput(threading.Thread):
         #     self.state = 'OFF'
         # time.sleep(1)
         self.notify()
-        return 0
+        self.event.set()
 
     def notify(self):
         event_du_log = threading.Event()  # on crée un objet de type Event
@@ -199,8 +212,9 @@ class BinaryInput(threading.Thread):
 
 class BinaryOutput(threading.Thread):
 
-    def __init__(self, gpio, state, lib):
+    def __init__(self, event, gpio, state, lib):
         threading.Thread.__init__(self)
+        self.event = event
         self.gpio = gpio
         self.state = state
         self.lib = lib
@@ -216,7 +230,7 @@ class BinaryOutput(threading.Thread):
         # time.sleep(1)
         # GPIO.cleanup()
         self.notify()
-        return 0
+        self.event.set()
 
     def notify(self):
         event_du_log = threading.Event()  # on crée un objet de type Event

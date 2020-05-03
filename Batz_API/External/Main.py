@@ -34,7 +34,7 @@ def GetSMS():
         print(just_log("GETSMS function failed , working on last SMS content"))
         temp = dict()
         temp['authent'] = 0
-        temp['content'] = "Batz ?"
+        temp['content'] = "Batz set chauffage auto"
         temp['number'] = "0666669261"
         temp['index'] = 12102
         print(just_log("last sms content : "))

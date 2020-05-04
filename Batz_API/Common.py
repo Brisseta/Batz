@@ -3,6 +3,8 @@ import threading
 from datetime import date
 import time
 # import RPi.GPIO as GPIO
+import multiprocessing as mp
+
 import huaweisms.api.sms
 import huaweisms.api.user
 import huaweisms.api.wlan
@@ -92,13 +94,10 @@ def change_to_on_mode():
 
 def change_to_auto_mode():
     from Batz_API.autoMode import AutoMode
-    event = threading.Event()  # on crée un objet de type Event
-    event.clear()  # simple clear de précaution
-    change_trigger_status(trigger_name='chauffage', value='AUTO')
-    my_AutoMode = AutoMode()
-    my_AutoMode.start()
-    event.wait()
-    print(just_log("Fin du automode"))
+    from Batz_API.External.Main import automode_status
+    pool = mp.Pool(processes=1)
+    process = AutoMode()
+    pool.apply_async(process.start(), )
 
 
 def commit(trigger):
@@ -137,6 +136,7 @@ class CheckTemperature(threading.Thread):
 
     def __init__(self, event):
         threading.Thread.__init__(self)
+        self.name = "CheckTemp"
         self.sensors = []
         self.event = event
 
@@ -183,6 +183,7 @@ class BinaryInput(threading.Thread):
 
     def __init__(self, event, gpio, lib):
         threading.Thread.__init__(self)
+        self.name = "BinaryInput"
         self.event = event
         self.gpio = gpio
         self.lib = lib
@@ -212,9 +213,9 @@ class BinaryInput(threading.Thread):
 
 class BinaryOutput(threading.Thread):
 
-    def __init__(self, event, gpio, state, lib):
+    def __init__(self, gpio, state, lib):
         threading.Thread.__init__(self)
-        self.event = event
+        self.name = "BinaryOutput"
         self.gpio = gpio
         self.state = state
         self.lib = lib
@@ -230,7 +231,7 @@ class BinaryOutput(threading.Thread):
         # time.sleep(1)
         # GPIO.cleanup()
         self.notify()
-        self.event.set()
+        # self.event.set()
 
     def notify(self):
         event_du_log = threading.Event()  # on crée un objet de type Event
@@ -246,6 +247,7 @@ class BinaryOutput(threading.Thread):
 class SendSMS(threading.Thread, ):
     def __init__(self, connetivity_context, event, contact, text):  # event = objet Event
         threading.Thread.__init__(self)  # = donnée supplémentaire
+        self.name = "SendSMS"
         self.connetivity_context = None
         self.event = event  # on garde un accès à l'objet Event
         self.contact = contact
@@ -289,6 +291,7 @@ class SendSMS(threading.Thread, ):
 class SendToLog(threading.Thread, ):
     def __init__(self, event, severity, content):  # event = objet Event
         threading.Thread.__init__(self)  # = donnée supplémentaire
+        self.name = "SendToLog"
         self.event = event  # on garde un accès à l'objet Event
         self.severity = severity
         self.content = content

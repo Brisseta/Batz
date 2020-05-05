@@ -220,6 +220,7 @@ if __name__ == '__main__':
                                                                           'CHAUFFAGE_AUTO']))
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
+                        Batz_API.Common.change_trigger_status("chauffage",value="AUTO")
                         if not automode_status:
                             fallback = Batz_API.Common.change_to_auto_mode()
 
@@ -248,4 +249,4 @@ if __name__ == '__main__':
                                                  build_get_log("ERROR"))  # crée un thread pour le get
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-        local_unread = 0
+        break

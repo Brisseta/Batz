@@ -31,7 +31,7 @@ class AutoMode(Process):
         self.timer2_obj = self.triggers.get(trigger_name='timer2')
         self.chauffage_status_obj = self.triggers.get(trigger_name='chauffage')
 
-    def run(self):
+    def start(self):
         automode_status = True
         do_it_again = True
         Batz_API.Common.change_trigger_status(trigger_name='relai1', value='ON')
@@ -61,7 +61,7 @@ class AutoMode(Process):
         self.commit()
 
     def stop(self):
-        self.timer1_obj.trigger_data = "OFF"
+        Batz_API.Common.change_trigger_status("timer1", value="OFF")
         self.save()
         self.terminate()
         automode_status = False
@@ -104,23 +104,16 @@ class AutoMode(Process):
             "sucessfully pushed " + str(sum(1 for _ in self.triggers.iterator())) + " rows to TriggerLog table"))
 
     def checkup(self):
-        # tant que le relai 1 fonctionne et le relai 2 est éteint
-        if self.relai1_obj.trigger_data == 'ON' and self.relai2_obj.trigger_data == 'OFF':
-            # si le timer est écoulé le termostat se met en marche
-            if self.timer1_obj.trigger_data == "OFF" and self.thermostat_obj.trigger_data == "ON":
-                # Passe le status du termostat à ON
-                self.timer1_obj.trigger_data = 'ON'
-                # j'active le relai 2
+        # Batz_API.Common.BinaryInput
+        if Batz_API.Common.get_trigger_data("termostat") == "ON":
+            Batz_API.Common.change_trigger_status("relai2", value="ON")
+            Batz_API.Common.change_trigger_status("timer1", value="ON")
+        else:
+            if Batz_API.Common.get_trigger_data("termostat") == "OFF" and Batz_API.Common.get_trigger_data(
+                    "timer2") == "OFF":
                 Batz_API.Common.change_trigger_status("relai2", value="ON")
-                Batz_API.Common.BinaryOutput(gpio=ressource_json['RELAI2_CTRL_PIN'], state=1, lib="relai2").run()
-                # Lance le timer
-                # self.background_timer()
-                # A la fin du timer je désactive le relai 2 et passe le termostat à OFF
-                if self.thermostat_obj.trigger_data is "OFF":
-                    self.timer1_obj.trigger_data = "OFF"
-                    Batz_API.Common.change_trigger_status("timer1", value="OFF")
-                    Batz_API.Common.change_trigger_status("termostat", value="OFF")
-                    Batz_API.Common.BinaryOutput(gpio=ressource_json['RELAI2_CTRL_PIN'], state=0, lib="relai2").run()
+            elif Batz_API.Common.get_trigger_data("termostat") == "OFF":
+                Batz_API.Common.change_trigger_status("relai2", value="OFF")
 
     def __setattr__(self, name: str, value: Any) -> None:
         super().__setattr__(name, value)

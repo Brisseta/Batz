@@ -50,11 +50,11 @@ def check_for_alert():
             print(just_log("fin innondation"))
             change_trigger_status("was_alerted", value="FALSE")
             change_trigger_status("status", value="NONE")
-        if get_trigger_data("secteur") == "1":
+        if get_trigger_data("secteur") == "0":
             #             TODO send secteur fault alert
             print(just_log("coupure courant detectée"))
             change_trigger_status("was_alerted", value="TRUE")
-        elif get_trigger_data("secteur") == "0":
+        elif get_trigger_data("secteur") == "1":
             #             TODO send secteur fault alert
             print(just_log("Fin de coupure courant "))
             change_trigger_status("was_alerted", value="FALSE")
@@ -66,11 +66,7 @@ def just_log(some_text):
 
 
 def do_check_temp():
-    event = threading.Event()  # on crée un objet de type Event
-    event.clear()  # simple clear de précaution
-    thread = CheckTemperature(event)
-    thread.run()
-    event.wait()
+    CheckTemperature()
     print(just_log("Getting temperature done"))
 
 
@@ -94,10 +90,10 @@ def change_to_on_mode():
 
 def change_to_auto_mode():
     from Batz_API.autoMode import AutoMode
-    from Batz_API.External.Main import automode_status
     pool = mp.Pool(processes=1)
     process = AutoMode()
     pool.apply_async(process.start(), )
+    pool.terminate()
 
 
 def commit(trigger):
@@ -119,7 +115,7 @@ def get_trigger_data(trigger_name):
     return trigger.trigger_data
 
 
-class CheckTemperature(threading.Thread):
+class CheckTemperature():
     """  Supported sensors are:
         * DS18S20
         * DS1822
@@ -134,11 +130,9 @@ class CheckTemperature(threading.Thread):
         * Fahrenheit
     """
 
-    def __init__(self, event):
-        threading.Thread.__init__(self)
+    def __init__(self):
         self.name = "CheckTemp"
         self.sensors = []
-        self.event = event
 
     def run(self):
         """Lance le check status en tâche de fond """
@@ -152,7 +146,6 @@ class CheckTemperature(threading.Thread):
                 trigger_name='timer2') == 'ON' and get_trigger_data("chauffage") == "AUTO":
             change_trigger_status(trigger_name='timer2', value='OFF')
         self.notify()
-        self.event.set()
 
     def identify(self, sensor_id):
         for label in ressource_json:

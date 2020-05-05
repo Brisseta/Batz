@@ -18,7 +18,8 @@ from Batz_API.Common import just_log, SendSMS, SendToLog, check_for_alert
 global connetivity_context
 content_global = ""
 user_in_db_global = 1
-trigger_list_global = []
+global automode_status
+automode_status = False
 with open('../ressouces.json', 'r') as f:
     ressource_json = json.load(f)
 
@@ -34,7 +35,7 @@ def GetSMS():
         print(just_log("GETSMS function failed , working on last SMS content"))
         temp = dict()
         temp['authent'] = 0
-        temp['content'] = "Batz ?"
+        temp['content'] = "Batz set chauffage auto"
         temp['number'] = "0666669261"
         temp['index'] = 12102
         print(just_log("last sms content : "))
@@ -219,7 +220,11 @@ if __name__ == '__main__':
                                                                           'CHAUFFAGE_AUTO']))
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-                        Batz_API.Common.change_to_auto_mode()
+                        Batz_API.Common.change_trigger_status("chauffage",value="AUTO")
+                        if not automode_status:
+                            fallback = Batz_API.Common.change_to_auto_mode()
+
+                        continue
 
                 if ressource_json['GET_LOG'] in getsms['content']:
                     # send sms log all

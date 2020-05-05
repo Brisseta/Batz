@@ -1,7 +1,8 @@
 import os
 import time
+from multiprocessing.context import Process
 from typing import Any
-
+from polling import poll, TimeoutException
 import win32timezone
 from rest_framework.utils import json
 
@@ -11,14 +12,17 @@ from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
 import Batz_API
 from Batz_API.Common import just_log
+from Batz_API.External.Main import automode_status
 from Batz_API.models import Trigger, TriggerLog
 
 with open('../ressouces.json', 'r') as f:
     ressource_json = json.load(f)
 
 
-class AutoMode:
+class AutoMode(Process):
     def __init__(self):
+        super().__init__()
+        self.name = "Automode"
         self.triggers = Batz_API.models.Trigger.objects
         self.relai1_obj = self.triggers.get(trigger_name='relai1')
         self.relai2_obj = self.triggers.get(trigger_name='relai2')
@@ -28,12 +32,22 @@ class AutoMode:
         self.chauffage_status_obj = self.triggers.get(trigger_name='chauffage')
 
     def start(self):
+        automode_status = True
+        do_it_again = True
         Batz_API.Common.change_trigger_status(trigger_name='relai1', value='ON')
-        while self.chauffage_status_obj.trigger_data == 'AUTO' and self.thermostat_obj.trigger_data == 'ON':
-            self.checkup()
+        while do_it_again:
             self.refresh()
-        self.stop()
-        # notify at the end  TODO
+            self.checkup()
+            do_it_again = Batz_API.Common.get_trigger_data('chauffage') == 'AUTO'
+            try:
+                poll(
+                    lambda: not do_it_again,
+                    step=int(ressource_json["POLLER_UPDATE_MINUTE"]),
+                    timeout=int(ressource_json["POLLER_UPDATE_MINUTE"]) * 10)
+            except TimeoutException:
+                if not do_it_again:
+                    self.stop()
+                    # notify at the end  TODO
 
     def refresh(self):
         self.print_status()
@@ -45,11 +59,13 @@ class AutoMode:
         self.chauffage_status_obj = self.triggers.get(trigger_name='chauffage')
         Batz_API.Common.do_check_temp()
         self.commit()
-        self.background_poller_wait()
 
     def stop(self):
-        self.timer1_obj.trigger_data = "OFF"
+        Batz_API.Common.change_trigger_status("timer1", value="OFF")
         self.save()
+        self.terminate()
+        automode_status = False
+        print(just_log("Fin du automode"))
 
     # notify at the end  TODO
     def save(self):
@@ -88,22 +104,16 @@ class AutoMode:
             "sucessfully pushed " + str(sum(1 for _ in self.triggers.iterator())) + " rows to TriggerLog table"))
 
     def checkup(self):
-        # tant que le relai 1 fonctionne et le relai 2 est éteint
-        if self.relai1_obj.trigger_data == 'ON' and self.relai2_obj.trigger_data == 'OFF':
-            # si le timer est écoulé le termostat se met en marche
-            if self.timer1_obj.trigger_data == "OFF" and self.thermostat_obj.trigger_data == "ON":
-                # Passe le status du termostat à ON
-                self.timer1_obj.trigger_data = 'ON'
-                # j'active le relai 2
-                self.relai2_obj.trigger_data = 'ON'
-                Batz_API.Common.BinaryOutput(gpio=ressource_json['RELAI2_CTRL_PIN'], state=1, lib="relai2").run()
-                # Lance le timer
-                self.background_timer()
-                # A la fin du timer je désactive le relai 2 et passe le termostat à OFF
-                if self.thermostat_obj.trigger_data is "ON":
-                    self.thermostat_obj.trigger_data = "OFF"
-                    self.relai2_obj.trigger_data = "OFF"
-                    Batz_API.Common.BinaryOutput(gpio=ressource_json['RELAI2_CTRL_PIN'], state=0, lib="relai2").run()
+        # Batz_API.Common.BinaryInput
+        if Batz_API.Common.get_trigger_data("termostat") == "ON":
+            Batz_API.Common.change_trigger_status("relai2", value="ON")
+            Batz_API.Common.change_trigger_status("timer1", value="ON")
+        else:
+            if Batz_API.Common.get_trigger_data("termostat") == "OFF" and Batz_API.Common.get_trigger_data(
+                    "timer2") == "OFF":
+                Batz_API.Common.change_trigger_status("relai2", value="ON")
+            elif Batz_API.Common.get_trigger_data("termostat") == "OFF":
+                Batz_API.Common.change_trigger_status("relai2", value="OFF")
 
     def __setattr__(self, name: str, value: Any) -> None:
         super().__setattr__(name, value)

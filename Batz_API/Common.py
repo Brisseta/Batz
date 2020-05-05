@@ -3,6 +3,8 @@ import threading
 from datetime import date
 import time
 # import RPi.GPIO as GPIO
+import multiprocessing as mp
+
 import huaweisms.api.sms
 import huaweisms.api.user
 import huaweisms.api.wlan
@@ -45,15 +47,18 @@ def check_for_alert():
             change_trigger_status("was_alerted", value="TRUE")
         elif get_trigger_data('pompe') == "0":
             #             TODO send fin inondation alert
-            print(just_log("innondation detectée"))
-            change_trigger_status("was_alerted", value="TRUE")
-        if get_trigger_data("secteur") == "1":
+            print(just_log("fin innondation"))
+            change_trigger_status("was_alerted", value="FALSE")
+            change_trigger_status("status", value="NONE")
+        if get_trigger_data("secteur") == "0":
             #             TODO send secteur fault alert
             print(just_log("coupure courant detectée"))
             change_trigger_status("was_alerted", value="TRUE")
-        elif get_trigger_data("secteur") == "0":
+        elif get_trigger_data("secteur") == "1":
             #             TODO send secteur fault alert
             print(just_log("Fin de coupure courant "))
+            change_trigger_status("was_alerted", value="FALSE")
+            change_trigger_status("status", value="NONE")
 
 
 def just_log(some_text):
@@ -61,9 +66,8 @@ def just_log(some_text):
 
 
 def do_check_temp():
-    check = CheckTemperature()
-    check.run()
-    print(just_log("Getting temperature"))
+    CheckTemperature()
+    print(just_log("Getting temperature done"))
 
 
 def change_to_off_mode():
@@ -86,9 +90,10 @@ def change_to_on_mode():
 
 def change_to_auto_mode():
     from Batz_API.autoMode import AutoMode
-    change_trigger_status(trigger_name='chauffage', value='AUTO')
-    my_AutoMode = AutoMode()
-    my_AutoMode.start()
+    pool = mp.Pool(processes=1)
+    process = AutoMode()
+    pool.apply_async(process.start(), )
+    pool.terminate()
 
 
 def commit(trigger):
@@ -110,7 +115,7 @@ def get_trigger_data(trigger_name):
     return trigger.trigger_data
 
 
-class CheckTemperature(threading.Thread):
+class CheckTemperature():
     """  Supported sensors are:
         * DS18S20
         * DS1822
@@ -126,7 +131,7 @@ class CheckTemperature(threading.Thread):
     """
 
     def __init__(self):
-        threading.Thread.__init__(self)
+        self.name = "CheckTemp"
         self.sensors = []
 
     def run(self):
@@ -169,8 +174,10 @@ class CheckTemperature(threading.Thread):
 
 class BinaryInput(threading.Thread):
 
-    def __init__(self, gpio, lib):
+    def __init__(self, event, gpio, lib):
         threading.Thread.__init__(self)
+        self.name = "BinaryInput"
+        self.event = event
         self.gpio = gpio
         self.lib = lib
         self.state = ''
@@ -184,7 +191,7 @@ class BinaryInput(threading.Thread):
         #     self.state = 'OFF'
         # time.sleep(1)
         self.notify()
-        return 0
+        self.event.set()
 
     def notify(self):
         event_du_log = threading.Event()  # on crée un objet de type Event
@@ -201,6 +208,7 @@ class BinaryOutput(threading.Thread):
 
     def __init__(self, gpio, state, lib):
         threading.Thread.__init__(self)
+        self.name = "BinaryOutput"
         self.gpio = gpio
         self.state = state
         self.lib = lib
@@ -216,7 +224,7 @@ class BinaryOutput(threading.Thread):
         # time.sleep(1)
         # GPIO.cleanup()
         self.notify()
-        return 0
+        # self.event.set()
 
     def notify(self):
         event_du_log = threading.Event()  # on crée un objet de type Event
@@ -232,6 +240,7 @@ class BinaryOutput(threading.Thread):
 class SendSMS(threading.Thread, ):
     def __init__(self, connetivity_context, event, contact, text):  # event = objet Event
         threading.Thread.__init__(self)  # = donnée supplémentaire
+        self.name = "SendSMS"
         self.connetivity_context = None
         self.event = event  # on garde un accès à l'objet Event
         self.contact = contact
@@ -275,6 +284,7 @@ class SendSMS(threading.Thread, ):
 class SendToLog(threading.Thread, ):
     def __init__(self, event, severity, content):  # event = objet Event
         threading.Thread.__init__(self)  # = donnée supplémentaire
+        self.name = "SendToLog"
         self.event = event  # on garde un accès à l'objet Event
         self.severity = severity
         self.content = content

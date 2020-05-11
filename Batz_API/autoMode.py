@@ -110,10 +110,11 @@ class AutoMode(Process):
             Batz_API.Common.change_trigger_status("timer1", value="ON")
         else:
             if Batz_API.Common.get_trigger_data("termostat") == "OFF" and Batz_API.Common.get_trigger_data(
-                    "timer2") == "OFF":
+                    "timer1") == "ON":
                 Batz_API.Common.change_trigger_status("relai2", value="ON")
             elif Batz_API.Common.get_trigger_data("termostat") == "OFF":
                 Batz_API.Common.change_trigger_status("relai2", value="OFF")
+                Batz_API.Common.change_trigger_status("timer1", value="OFF")
 
     def __setattr__(self, name: str, value: Any) -> None:
         super().__setattr__(name, value)

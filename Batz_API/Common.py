@@ -12,6 +12,7 @@ import win32timezone
 from rest_framework.utils import json
 
 # from w1thermsensor import W1ThermSensor
+# from w1thermsensor import W1ThermSensor
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Batz.settings")
 from django.core.wsgi import get_wsgi_application

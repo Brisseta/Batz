@@ -7,6 +7,7 @@ import threading
 import huaweisms.api.sms
 import huaweisms.api.user
 import huaweisms.api.wlan
+from polling import TimeoutException, poll
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Batz.settings")
 from django.core.wsgi import get_wsgi_application
@@ -14,13 +15,13 @@ from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
 import Batz_API.models
 from Batz_API.Common import just_log, SendSMS, SendToLog, check_for_alert
+from Batz_API.autoMode import AutoMode
 
 global connetivity_context
 content_global = ""
 user_in_db_global = 1
 global automode_status
-automode_status = False
-with open('../ressouces.json', 'r') as f:
+with open('ressouces.json', 'r') as f:
     ressource_json = json.load(f)
 
 
@@ -169,84 +170,95 @@ def build_command_change(trigger_name, set_value):
 
 
 if __name__ == '__main__':
-
+    # try:
+    #     poll(
+    #         lambda: not do_it_again,
+    #         step=int(ressource_json["POLLER_UPDATE_MINUTE"]),
+    #         timeout=int(ressource_json["POLLER_UPDATE_MINUTE"]) * 10)
     while 1 < 2:  # infinite loop
         connetivity_context = CheckConnectivity()
         local_unread = int(GetSMSCount())
-        Batz_API.Common.check_for_alert()
-        if local_unread != 0:
-            getsms = GetSMS()  # crée un thread pour le get
-            # --------------- DEBUT DU TRAITEMENT DU GET --------------------------- #
+        local_unread = 0
+        do_it_again = local_unread != 0 and not connetivity_context
+        while do_it_again:
+            try:
+                getsms = GetSMS()  # crée un thread pour le get
+                # --------------- DEBUT DU TRAITEMENT DU GET --------------------------- #
 
-            if ressource_json['CMD_DEFAULT'] in getsms['content'] and getsms['authent'] == 0:
-                if ressource_json['GET_VIEW'] in getsms['content']:
-                    # send sms display
-                    event_du_send = threading.Event()  # on crée un objet de type Event
-                    event_du_send.clear()  # simple clear de précaution
-                    thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
-                                             build_get_view(getsms['number']))  # crée un thread pour le get
-                    thread_du_send.start()  # démarre le thread,
-                    event_du_send.wait()  # on attend la fin du get
-                if ressource_json['SET_CHAUFFAGE'] in getsms['content']:
-                    if ressource_json['CHAUFFAGE_ON'] in getsms['content'].upper():
-                        Batz_API.Common.change_to_on_mode()
+                if ressource_json['CMD_DEFAULT'] in getsms['content'] and getsms['authent'] == 0:
+                    if ressource_json['GET_VIEW'] in getsms['content']:
+                        # send sms display
                         event_du_send = threading.Event()  # on crée un objet de type Event
                         event_du_send.clear()  # simple clear de précaution
                         thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
-                                                 build_command_change(ressource_json['CHAUFFAGE_LIB'],
-                                                                      ressource_json[
-                                                                          'CHAUFFAGE_ON']))
+                                                 build_get_view(getsms['number']))  # crée un thread pour le get
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-                        Batz_API.Common.change_trigger_status(trigger_name='chauffage', value='ON')
-                    if ressource_json['CHAUFFAGE_OFF'] in getsms['content'].upper():
-                        Batz_API.Common.change_to_off_mode()
-                        event_du_send = threading.Event()  # on crée un objet de type Event
-                        event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
-                                                 build_command_change(ressource_json['CHAUFFAGE_LIB'],
-                                                                      ressource_json[
-                                                                          'CHAUFFAGE_OFF']))
-                        thread_du_send.start()  # démarre le thread,
-                        event_du_send.wait()  # on attend la fin du get
-                        Batz_API.Common.change_trigger_status(trigger_name='chauffage', value='OFF')
+                    if ressource_json['SET_CHAUFFAGE'] in getsms['content']:
+                        if ressource_json['CHAUFFAGE_ON'] in getsms['content'].upper():
+                            Batz_API.Common.change_to_on_mode()
+                            event_du_send = threading.Event()  # on crée un objet de type Event
+                            event_du_send.clear()  # simple clear de précaution
+                            thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
+                                                     build_command_change(ressource_json['CHAUFFAGE_LIB'],
+                                                                          ressource_json[
+                                                                              'CHAUFFAGE_ON']))
+                            thread_du_send.start()  # démarre le thread,
+                            event_du_send.wait()  # on attend la fin du get
+                            Batz_API.Common.change_trigger_status(trigger_name='chauffage', value='ON')
+                        if ressource_json['CHAUFFAGE_OFF'] in getsms['content'].upper():
+                            Batz_API.Common.change_to_off_mode()
+                            event_du_send = threading.Event()  # on crée un objet de type Event
+                            event_du_send.clear()  # simple clear de précaution
+                            thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
+                                                     build_command_change(ressource_json['CHAUFFAGE_LIB'],
+                                                                          ressource_json[
+                                                                              'CHAUFFAGE_OFF']))
+                            thread_du_send.start()  # démarre le thread,
+                            event_du_send.wait()  # on attend la fin du get
+                            Batz_API.Common.change_trigger_status(trigger_name='chauffage', value='OFF')
 
-                    if ressource_json['CHAUFFAGE_AUTO'] in getsms['content'].upper():
-                        event_du_send = threading.Event()  # on crée un objet de type Event
-                        event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
-                                                 build_command_change(ressource_json['CHAUFFAGE_LIB'],
-                                                                      ressource_json[
-                                                                          'CHAUFFAGE_AUTO']))
-                        thread_du_send.start()  # démarre le thread,
-                        event_du_send.wait()  # on attend la fin du get
-                        Batz_API.Common.change_trigger_status("chauffage",value="AUTO")
-                        if not automode_status:
-                            fallback = Batz_API.Common.change_to_auto_mode()
+                        if ressource_json['CHAUFFAGE_AUTO'] in getsms['content'].upper():
+                            event_du_send = threading.Event()  # on crée un objet de type Event
+                            event_du_send.clear()  # simple clear de précaution
+                            thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
+                                                     build_command_change(ressource_json['CHAUFFAGE_LIB'],
+                                                                          ressource_json[
+                                                                              'CHAUFFAGE_AUTO']))
+                            thread_du_send.start()  # démarre le thread,
+                            event_du_send.wait()  # on attend la fin du get
+                            Batz_API.Common.change_trigger_status("chauffage", value="AUTO")
 
-                        continue
-
-                if ressource_json['GET_LOG'] in getsms['content']:
-                    # send sms log all
-                    if "info" in getsms['content']:
-                        event_du_send = threading.Event()  # on crée un objet de type Event
-                        event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
-                                                 build_get_log("INFO"))  # crée un thread pour le get
-                        thread_du_send.start()  # démarre le thread,
-                        event_du_send.wait()  # on attend la fin du get
-                    if "warning" in getsms['content']:
-                        event_du_send = threading.Event()  # on crée un objet de type Event
-                        event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
-                                                 build_get_log("WARNING"))  # crée un thread pour le get
-                        thread_du_send.start()  # démarre le thread,
-                        event_du_send.wait()  # on attend la fin du get
-                    if "error" in getsms['content']:
-                        event_du_send = threading.Event()  # on crée un objet de type Event
-                        event_du_send.clear()  # simple clear de précaution
-                        thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
-                                                 build_get_log("ERROR"))  # crée un thread pour le get
-                        thread_du_send.start()  # démarre le thread,
-                        event_du_send.wait()  # on attend la fin du get
-        break
+                    if ressource_json['GET_LOG'] in getsms['content']:
+                        # send sms log all
+                        if "info" in getsms['content']:
+                            event_du_send = threading.Event()  # on crée un objet de type Event
+                            event_du_send.clear()  # simple clear de précaution
+                            thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
+                                                     build_get_log("INFO"))  # crée un thread pour le get
+                            thread_du_send.start()  # démarre le thread,
+                            event_du_send.wait()  # on attend la fin du get
+                        if "warning" in getsms['content']:
+                            event_du_send = threading.Event()  # on crée un objet de type Event
+                            event_du_send.clear()  # simple clear de précaution
+                            thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
+                                                     build_get_log("WARNING"))  # crée un thread pour le get
+                            thread_du_send.start()  # démarre le thread,
+                            event_du_send.wait()  # on attend la fin du get
+                        if "error" in getsms['content']:
+                            event_du_send = threading.Event()  # on crée un objet de type Event
+                            event_du_send.clear()  # simple clear de précaution
+                            thread_du_send = SendSMS(connetivity_context, event_du_send, getsms['number'],
+                                                     build_get_log("ERROR"))  # crée un thread pour le get
+                            thread_du_send.start()  # démarre le thread,
+                            event_du_send.wait()  # on attend la fin du get
+            except TimeoutException:
+                continue
+        if not do_it_again:
+            print(just_log("nothing to respond by sms"))
+            Batz_API.Common.check_for_alert()
+            automode_status = True
+            if automode_status:
+                do_auto_routine = AutoMode(automode_status)
+                do_auto_routine.refresh()
+                do_auto_routine.checkup()

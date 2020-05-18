@@ -8,11 +8,12 @@ import multiprocessing as mp
 import huaweisms.api.sms
 import huaweisms.api.user
 import huaweisms.api.wlan
-import win32timezone
+import datetime
 from rest_framework.utils import json
 
 # from w1thermsensor import W1ThermSensor
 # from w1thermsensor import W1ThermSensor
+from Batz_API.autoMode import AutoMode
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Batz.settings")
 from django.core.wsgi import get_wsgi_application
@@ -22,7 +23,7 @@ import Batz_API
 from Batz_API import models
 from Batz_API.models import TriggerLog
 
-with open('../ressouces.json', 'r') as f:
+with open('ressouces.json', 'r') as f:
     ressource_json = json.load(f)
 
 my_AutoMode = None
@@ -63,7 +64,7 @@ def check_for_alert():
 
 
 def just_log(some_text):
-    return win32timezone.now().strftime("%d/%m/%Y %H:%M:%S") + " : " + some_text
+    return datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S") + " : " + some_text
 
 
 def do_check_temp():
@@ -89,12 +90,8 @@ def change_to_on_mode():
     Batz_API.Common.BinaryOutput(gpio=ressource_json['RELAI2_CTRL_PIN'], state=1, lib="relai2").run()
 
 
-def change_to_auto_mode():
-    from Batz_API.autoMode import AutoMode
-    pool = mp.Pool(processes=1)
-    process = AutoMode()
-    pool.apply_async(process.start(), )
-    pool.terminate()
+def do_automode(automode_status):
+    process = AutoMode(automode_status)
 
 
 def commit(trigger):

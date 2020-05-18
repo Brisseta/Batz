@@ -1,0 +1,8 @@
+RPi.GPIO
+django
+w1thermsensor
+djangorestframework
+huawei-modem-api-client
+multiprocessing
+polling
+huawei_modem_api_client

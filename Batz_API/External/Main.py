@@ -3,13 +3,16 @@ import os
 import platform  # For getting the operating system name
 import subprocess  # For executing a shell command
 import threading
-
+import django
+import sys
 import huaweisms.api.sms
 import huaweisms.api.user
 import huaweisms.api.wlan
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Batz.settings")
 from django.core.wsgi import get_wsgi_application
+sys.path.append("/home/pi/project/Batz")
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Batz.settings')
+django.setup()
 
 application = get_wsgi_application()
 import Batz_API.models
@@ -20,7 +23,7 @@ content_global = ""
 user_in_db_global = 1
 global automode_status
 automode_status = False
-with open('../ressouces.json', 'r') as f:
+with open('/home/pi/project/Batz/Batz_API/ressouces.json', 'r') as f:
     ressource_json = json.load(f)
 
 
@@ -35,7 +38,7 @@ def GetSMS():
         print(just_log("GETSMS function failed , working on last SMS content"))
         temp = dict()
         temp['authent'] = 0
-        temp['content'] = "Batz set chauffage auto"
+        temp['content'] = "Batz set chauffage on"
         temp['number'] = "0666669261"
         temp['index'] = 12102
         print(just_log("last sms content : "))
@@ -108,8 +111,8 @@ def userInDB(message):
         event_du_log = threading.Event()  # on crée un objet de type Event
         event_du_log.clear()  # simple clear de précaution
         thread_du_log = SendToLog(event_du_log, severity="INFO", content=
-        "<phone> " + getMessagerie(message)[1][0]['Phone'] + " <content> " + getMessagerie(message)[1][0][
-            'Content'])
+        "<phone> " + str(getMessagerie(message)[1][0]['Phone']) + " <content> " + str(getMessagerie(message)[1][0][
+            'Content']))
         thread_du_log.start()  # démarre le thread,
         event_du_log.wait()  # on attend la fin du get
 
@@ -173,7 +176,7 @@ if __name__ == '__main__':
     while 1 < 2:  # infinite loop
         connetivity_context = CheckConnectivity()
         local_unread = int(GetSMSCount())
-        Batz_API.Common.check_for_alert()
+        Batz_API.Common.check_for_alert(connetivity_context)
         if local_unread != 0:
             getsms = GetSMS()  # crée un thread pour le get
             # --------------- DEBUT DU TRAITEMENT DU GET --------------------------- #
@@ -220,7 +223,7 @@ if __name__ == '__main__':
                                                                           'CHAUFFAGE_AUTO']))
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-                        Batz_API.Common.change_trigger_status("chauffage",value="AUTO")
+                        Batz_API.Common.change_trigger_status("chauffage", value="AUTO")
                         if not automode_status:
                             fallback = Batz_API.Common.change_to_auto_mode()
 
@@ -249,4 +252,4 @@ if __name__ == '__main__':
                                                  build_get_log("ERROR"))  # crée un thread pour le get
                         thread_du_send.start()  # démarre le thread,
                         event_du_send.wait()  # on attend la fin du get
-        break
+        # break

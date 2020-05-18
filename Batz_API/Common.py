@@ -2,13 +2,13 @@ import os
 import threading
 from datetime import date
 import time
-# import RPi.GPIO as GPIO
+import RPi.GPIO as GPIO
 import multiprocessing as mp
-
+from w1thermsensor import W1ThermSensor
 import huaweisms.api.sms
 import huaweisms.api.user
 import huaweisms.api.wlan
-import win32timezone
+import datetime
 from rest_framework.utils import json
 
 # from w1thermsensor import W1ThermSensor
@@ -22,52 +22,64 @@ import Batz_API
 from Batz_API import models
 from Batz_API.models import TriggerLog
 
-with open('../ressouces.json', 'r') as f:
+with open('/home/pi/project/Batz/Batz_API/ressouces.json', 'r') as f:
     ressource_json = json.load(f)
 
 my_AutoMode = None
 
 
-def check_for_alert():
-    # pompe_status = BinaryInput(gpio=ressource_json['POMPE_CTRL_PIN'], lib="pompe")
-    # pompe_status.run()
-    # if pompe_status.state == 1:
-    #     change_trigger_status("pompe", value=1)
-    # else:
-    #     change_trigger_status("pompe", value=0)
-    # secteur_status = BinaryInput(gpio=ressource_json['SECTEUR_CTRL_PIN'], lib='secteur')
-    # secteur_status.run()
-    # if secteur_status.state == 1:
-    #     change_trigger_status("secteur", value=1)
-    # else:
-    #     change_trigger_status("secteur", value=0)
+def notify_admin(connectivity_context, text):
+    admins = models.Contact.objects.filter(contact_privilege_id=1)
+    print(admins)
+    for admin in admins:
+        event_du_send = threading.Event()  # on crée un objet de type Event
+        event_du_send.clear()  # simple clear de précaution
+        thread_du_send = SendSMS(connectivity_context, event_du_send, admin.contact_phonenumber,
+                                 text=text)  # crée un thread pour le get
+        thread_du_send.start()  # démarre le thread,
+        event_du_send.wait()  # on attend la fin du get
+
+
+def check_for_alert(connectivity_context):
+    pompe_status = BinaryInput(gpio=ressource_json['POMPE_CTRL_PIN'], lib="pompe")
+    pompe_status.run()
+    if pompe_status.state == 'ON':
+        change_trigger_status("pompe", value=1)
+        change_trigger_status("status", value='ERROR')
+    else:
+        change_trigger_status("pompe", value=0)
+        change_trigger_status("status", value='NONE')
+    secteur_status = BinaryInput(gpio=ressource_json['SECTEUR_CTRL_PIN'], lib='secteur')
+    secteur_status.run()
+    if secteur_status.state == 'ON':
+        change_trigger_status("secteur", value=1)
+        change_trigger_status("status", value='ERROR')
+    else:
+        change_trigger_status("secteur", value=0)
+        change_trigger_status("status", value='NONE')
     if get_trigger_data("was_alerted") == 'FALSE' and get_trigger_data('status') == 'ERROR':
         if get_trigger_data('pompe') == "1":
-            #             TODO send inondation alert
-            print(just_log("innondation detectée"))
-            change_trigger_status("was_alerted", value="TRUE")
+            notify_admin(connectivity_context, just_log("innondation detectée"))
+            # change_trigger_status("was_alerted", value="TRUE")
         elif get_trigger_data('pompe') == "0":
-            #             TODO send fin inondation alert
-            print(just_log("fin innondation"))
-            change_trigger_status("was_alerted", value="FALSE")
+            notify_admin(connectivity_context, just_log("fin innondation"))
+            # change_trigger_status("was_alerted", value="FALSE")
             change_trigger_status("status", value="NONE")
         if get_trigger_data("secteur") == "0":
-            #             TODO send secteur fault alert
-            print(just_log("coupure courant detectée"))
+            notify_admin(connectivity_context, just_log("coupure courant detectée"))
             change_trigger_status("was_alerted", value="TRUE")
         elif get_trigger_data("secteur") == "1":
-            #             TODO send secteur fault alert
-            print(just_log("Fin de coupure courant "))
+            notify_admin(connectivity_context, just_log("Fin de coupure courant "))
             change_trigger_status("was_alerted", value="FALSE")
             change_trigger_status("status", value="NONE")
 
 
 def just_log(some_text):
-    return win32timezone.now().strftime("%d/%m/%Y %H:%M:%S") + " : " + some_text
+    return datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S") + " : " + some_text
 
 
 def do_check_temp():
-    CheckTemperature()
+    CheckTemperature().run()
     print(just_log("Getting temperature done"))
 
 
@@ -76,8 +88,16 @@ def change_to_off_mode():
         my_AutoMode.stop()
     change_trigger_status(trigger_name='relai1', value='OFF')
     change_trigger_status(trigger_name='relai2', value='OFF')
-    Batz_API.Common.BinaryOutput(gpio=ressource_json['RELAI1_CTRL_PIN'], state=0, lib="relai1").run()
-    Batz_API.Common.BinaryOutput(gpio=ressource_json['RELAI2_CTRL_PIN'], state=0, lib="relai2").run()
+    event1 = threading.Event()  # on crée un objet de type Event
+    event1.clear()  # simple clear de précaution
+    thread1 = Batz_API.Common.BinaryOutput(event=event1, gpio=ressource_json['RELAI1_CTRL_PIN'], state=0, lib="relai1")
+    thread1.start()  # démarre le thread,
+    event1.wait()  # on attend la fin du get
+    event2 = threading.Event()  # on crée un objet de type Event
+    event2.clear()  # simple clear de précaution
+    thread2 = Batz_API.Common.BinaryOutput(event=event2, gpio=ressource_json['RELAI2_CTRL_PIN'], state=0, lib="relai2")
+    thread2.start()  # démarre le thread,
+    event2.wait()  # on attend la fin du get
 
 
 def change_to_on_mode():
@@ -85,8 +105,16 @@ def change_to_on_mode():
         my_AutoMode.stop()
     change_trigger_status(trigger_name='relai1', value='ON')
     change_trigger_status(trigger_name='relai2', value='ON')
-    Batz_API.Common.BinaryOutput(gpio=ressource_json['RELAI1_CTRL_PIN'], state=1, lib="relai1").run()
-    Batz_API.Common.BinaryOutput(gpio=ressource_json['RELAI2_CTRL_PIN'], state=1, lib="relai2").run()
+    event1 = threading.Event()  # on crée un objet de type Event
+    event1.clear()  # simple clear de précaution
+    thread1 = Batz_API.Common.BinaryOutput(event=event1, gpio=ressource_json['RELAI1_CTRL_PIN'], state=1, lib="relai1")
+    thread1.start()  # démarre le thread,
+    event1.wait()  # on attend la fin du get
+    event2 = threading.Event()  # on crée un objet de type Event
+    event2.clear()  # simple clear de précaution
+    thread2 = Batz_API.Common.BinaryOutput(event=event2, gpio=ressource_json['RELAI2_CTRL_PIN'], state=1, lib="relai2")
+    thread2.start()  # démarre le thread,
+    event2.wait()  # on attend la fin du get
 
 
 def change_to_auto_mode():
@@ -137,10 +165,11 @@ class CheckTemperature():
 
     def run(self):
         """Lance le check status en tâche de fond """
-        # for sensor in W1ThermSensor.get_available_sensors():
-        #     self.sensors.append({"type": sensor.type, "id": sensor.id, "name": self.identify(sensor.id),
-        #                          "value": sensor.get_temperature()})
-        #     print("Sensor %s has temperature %.2f" % (sensor.id, sensor.get_temperature()))
+        print("RUN")
+        for sensor in W1ThermSensor.get_available_sensors():
+            self.sensors.append({"type": sensor.type, "id": sensor.id, "name": self.identify(sensor.id),
+                                 "value": sensor.get_temperature()})
+            print("Sensor %s has temperature %.2f" % (sensor.id, sensor.get_temperature()))
         if self.is_below_trigger(trigger_name='interieur') and get_trigger_data('chauffage') == 'AUTO':
             change_trigger_status(trigger_name='timer2', value='ON')
         elif self.is_above_trigger(trigger_name='interieur') and get_trigger_data(
@@ -165,34 +194,31 @@ class CheckTemperature():
         """stocke le résultat en BDD dans la table triggerLog"""
         print(just_log("Results for %d sensors" % sum(1 for _ in self.sensors)))
         for sensor in self.sensors:
-            print(just_log("sensor %s %s %s"), sensor['name'], sensor['type'], sensor['value'])
             try:
-                new_trigger = models.TriggerLog(trigger_name=sensor['name'], trigger_data=sensor['value'])
+                new_trigger = models.TriggerLog(trigger_name=sensor['name'], trigger_data=sensor['value'],
+                                                trigger_date=datetime.datetime.now())
                 new_trigger.save(force_insert=True)
             except:
                 print(just_log("Unrecognised sensor name") % sensor['name'])
 
 
-class BinaryInput(threading.Thread):
+class BinaryInput():
 
-    def __init__(self, event, gpio, lib):
-        threading.Thread.__init__(self)
+    def __init__(self, gpio, lib):
         self.name = "BinaryInput"
-        self.event = event
         self.gpio = gpio
         self.lib = lib
         self.state = ''
 
     def run(self):
-        # self.setmode(GPIO.BCM)
-        # GPIO.setup(self.gpio,GPIO.IN)
-        # if GPIO.input(self.gpio) == True
-        #     self.state = 'ON'
-        # elif GPIO.input(self.gpio) == False
-        #     self.state = 'OFF'
-        # time.sleep(1)
+        GPIO.setmode(GPIO.BOARD)
+        GPIO.setup(self.gpio, GPIO.IN)
+        if GPIO.input(self.gpio):
+            self.state = 'ON'
+        elif not GPIO.input(self.gpio):
+            self.state = 'OFF'
+        time.sleep(1)
         self.notify()
-        self.event.set()
 
     def notify(self):
         event_du_log = threading.Event()  # on crée un objet de type Event
@@ -207,25 +233,24 @@ class BinaryInput(threading.Thread):
 
 class BinaryOutput(threading.Thread):
 
-    def __init__(self, gpio, state, lib):
+    def __init__(self, event, gpio, state, lib):
         threading.Thread.__init__(self)
+        self.event = event
         self.name = "BinaryOutput"
         self.gpio = gpio
         self.state = state
         self.lib = lib
 
     def run(self):
-        # GPIO.cleanup()
-        # self.setmode(GPIO.BCM)
-        # GPIO.setup(self.gpio,GPIO.OUT)
-        # if self.state == 0:
-        #     GPIO.output(self.gpio,GPIO.LOW)
-        # elif self.state == 1
-        #     GPIO.output(self.gpio, GPIO.HIGH)
-        # time.sleep(1)
-        # GPIO.cleanup()
+        GPIO.setmode(GPIO.BOARD)
+        GPIO.setup(self.gpio, GPIO.OUT)
+        if self.state == 0:
+            GPIO.output(self.gpio, GPIO.LOW)
+        elif self.state == 1:
+            GPIO.output(self.gpio, GPIO.HIGH)
+        time.sleep(1)
         self.notify()
-        # self.event.set()
+        self.event.set()
 
     def notify(self):
         event_du_log = threading.Event()  # on crée un objet de type Event
@@ -242,7 +267,7 @@ class SendSMS(threading.Thread, ):
     def __init__(self, connetivity_context, event, contact, text):  # event = objet Event
         threading.Thread.__init__(self)  # = donnée supplémentaire
         self.name = "SendSMS"
-        self.connetivity_context = None
+        self.connetivity_context = connetivity_context
         self.event = event  # on garde un accès à l'objet Event
         self.contact = contact
         self.text = text

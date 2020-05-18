@@ -1,9 +1,9 @@
 import os
+import datetime
 import time
 from multiprocessing.context import Process
 from typing import Any
 from polling import poll, TimeoutException
-import win32timezone
 from rest_framework.utils import json
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Batz.settings")
@@ -12,10 +12,10 @@ from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
 import Batz_API
 from Batz_API.Common import just_log
-from Batz_API.External.Main import automode_status
+from Batz_API.Main import automode_status
 from Batz_API.models import Trigger, TriggerLog
 
-with open('../ressouces.json', 'r') as f:
+with open('/home/pi/project/Batz/Batz_API/ressouces.json', 'r') as f:
     ressource_json = json.load(f)
 
 
@@ -73,7 +73,7 @@ class AutoMode(Process):
         self.relai2_obj.save(force_update=True)
         self.chauffage_status_obj.save(force_update=True)
         self.thermostat_obj.save(force_update=True)
-        self.triggers.all().update(trigger_date=win32timezone.now())
+        self.triggers.all().update(trigger_date=datetime.datetime.now())
 
     def background_timer(self):
         # sleep till the end of TIMER1
@@ -90,7 +90,7 @@ class AutoMode(Process):
     def print_status(self):
         print_res = {"relai1": self.relai1_obj.trigger_data, "relai2": self.relai2_obj.trigger_data,
                      "thermostat": self.thermostat_obj.trigger_data, "timer1": self.timer1_obj.trigger_data}
-        print("Status on %s" % win32timezone.now().strftime("%d/%m/%Y %H:%M:%S"))
+        print("Status on %s" % datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
         for status in print_res.items():
             print(status)
 

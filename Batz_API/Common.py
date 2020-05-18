@@ -285,8 +285,9 @@ class SendSMS(threading.Thread, ):
                     huaweisms.api.sms.send_sms(
                         ctx, Batz_API.models.Contact.objects.get(
                             contact_phonenumber=self.contact).contact_phonenumber,
-                        self.text
+                        str(self.text)
                     )
+                    print("send ", str(self.text))
                     event_du_log = threading.Event()  # on crée un objet de type Event
                     event_du_log.clear()  # simple clear de précaution
                     thread_du_log = SendToLog(event_du_log, severity="INFO",

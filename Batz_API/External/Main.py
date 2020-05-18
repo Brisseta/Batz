@@ -145,6 +145,7 @@ def build_get_view(number):
         trigger_name=ressource_json['CAPTEUR_RAD_LIB'])) + ressource_json['Celsus'] + "\n"
     response += ressource_json['CHAUFFAGE'] + Batz_API.Common.get_trigger_data(
         trigger_name=ressource_json['CHAUFFAGE_LIB']) + "\n"
+    print(response)
     return response
 
 

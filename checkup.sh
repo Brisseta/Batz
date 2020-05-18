@@ -31,6 +31,7 @@ fi
 cd $DEFAULTPWD/Batz || exit
 source /home/pi/project/venv/bin/activate
 pip install -r "/home/pi/project/requirements.txt" -v --exists-action s
+echo "pip install success" >> /home/pi/project/shell_out/temp.txt
 screens=(/var/run/screen/S-*/*)
 if (( ${#screens[@]} == 0 )); then
     echo "no screen session found in /var/run/screen" >> /home/pi/project/shell_out/temp.txt
@@ -39,7 +40,6 @@ if (( ${#screens[@]} == 0 )); then
     else
         echo "des process sont en cours - suppression des process" >> /home/pi/project/shell_out/temp.txt
         echo "$(screen -ls)" >> /home/pi/project/shell_out/temp.txt
-        echo "${screens[@]#*S-}" >> /home/pi/project/shell_out/temp.txt
         killall screen
         screen -dmS Batz python $DEFAULTPWD/Batz/Batz_API/Main.py
         echo "lancement du process Batz" >> /home/pi/project/shell_out/temp.txt
